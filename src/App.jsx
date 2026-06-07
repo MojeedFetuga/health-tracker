@@ -4,7 +4,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 import { IS_CONFIGURED } from "./firebaseConfig.js";
 import {
   listenAuthState, signInWithGoogle, signOut,
-  backupToCloud, restoreFromCloud,
+  backupToCloud, restoreFromCloud, subscribeToCloud,
 } from "./cloudBackup.js";
 
 const STORAGE_KEY = "healthtracker_v1";
@@ -1020,38 +1020,17 @@ const GOOGLE_SVG = (
   </svg>
 );
 
-function BackupTab({ data, save, toast, isOnline }) {
-  const [user, setUser]               = useState(null);
+function BackupTab({ data, save, toast, isOnline, user, syncStatus }) {
   const [authLoading, setAuthLoading] = useState(false);
-  const [lastBackup, setLastBackup]   = useState(() => localStorage.getItem("htLastBackup") || null);
-  const [autoBackup, setAutoBackup]   = useState(() => localStorage.getItem("htAutoBackup") === "true");
+  const [lastBackup, setLastBackup]   = useState(() => localStorage.getItem("htLastSync") || null);
   const [status, setStatus]           = useState(null);
   const [opLoading, setOpLoading]     = useState(null);
-  const autoRef = useRef(autoBackup);
-  autoRef.current = autoBackup;
-  const userRef = useRef(user);
-  userRef.current = user;
 
-  // Firebase auth state persists across page reloads automatically
+  // Keep lastBackup display in sync with storage key written by App-level sync
   useEffect(() => {
-    if (!IS_CONFIGURED) return;
-    const unsub = listenAuthState(setUser);
-    return unsub;
-  }, []);
-
-  // Auto-backup when coming back online
-  useEffect(() => {
-    if (isOnline && autoRef.current && userRef.current) runBackup(true);
-  }, [isOnline]); // eslint-disable-line
-
-  // Auto-backup when data changes (debounced 20 s)
-  const timerRef = useRef(null);
-  useEffect(() => {
-    if (!autoRef.current || !userRef.current || !isOnline) return;
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => runBackup(true), 20_000);
-    return () => clearTimeout(timerRef.current);
-  }, [data]); // eslint-disable-line
+    const stored = localStorage.getItem("htLastSync");
+    if (stored) setLastBackup(stored);
+  }, [syncStatus]);
 
   async function handleSignIn() {
     setAuthLoading(true);
@@ -1090,7 +1069,7 @@ function BackupTab({ data, save, toast, isOnline }) {
     try {
       const ts = await backupToCloud(data);
       setLastBackup(ts);
-      localStorage.setItem("htLastBackup", ts);
+      localStorage.setItem("htLastSync", ts);
       if (!silent) { setStatus({ type: "success", msg: "Backup saved successfully." }); toast("Backup complete"); }
     } catch (e) {
       if (!silent) setStatus({ type: "error", msg: "Backup failed: " + e.message });
@@ -1110,7 +1089,7 @@ function BackupTab({ data, save, toast, isOnline }) {
       save(result.data);
       const ts = result.modifiedTime;
       setLastBackup(ts);
-      localStorage.setItem("htLastBackup", ts);
+      localStorage.setItem("htLastSync", ts);
       setStatus({ type: "success", msg: "Data restored from your backup." });
       toast("Data restored successfully");
     } catch (e) {
@@ -1118,12 +1097,6 @@ function BackupTab({ data, save, toast, isOnline }) {
     } finally {
       setOpLoading(null);
     }
-  }
-
-  function toggleAutoBackup(val) {
-    setAutoBackup(val);
-    localStorage.setItem("htAutoBackup", String(val));
-    autoRef.current = val;
   }
 
   const dataSize = (new Blob([JSON.stringify(data)]).size / 1024).toFixed(1);
@@ -1203,21 +1176,22 @@ service cloud.firestore {
         </div>
 
         <div className="last-backup-row">
-          <span className={`last-backup-dot ${lastBackup ? "" : "never"}`} />
-          {lastBackup
-            ? <>Last backup: <strong>{timeAgo(lastBackup)}</strong> &nbsp;·&nbsp; {dataSize} KB · {data.persons.length} persons · {data.records.length} records</>
-            : "No backup yet — click Backup Now to save your data"}
+          <span className={`last-backup-dot ${syncStatus === "syncing" ? "syncing" : lastBackup ? "" : "never"}`} />
+          {syncStatus === "syncing"
+            ? <span style={{ color: "var(--teal)" }}>Syncing…</span>
+            : syncStatus === "error"
+            ? <span style={{ color: "var(--rose)" }}>Sync error — tap Backup Now to retry</span>
+            : lastBackup
+            ? <>Last synced: <strong>{timeAgo(lastBackup)}</strong> &nbsp;·&nbsp; {dataSize} KB · {data.persons.length} persons · {data.records.length} records</>
+            : "No sync yet — your data will sync automatically when you make a change"}
         </div>
 
         <div className="auto-backup-row">
           <div className="auto-backup-text">
-            <div className="label">Auto-backup when online</div>
-            <div className="sub">Backs up automatically whenever you reconnect or your data changes.</div>
+            <div className="label">🔄 Real-time sync active</div>
+            <div className="sub">Changes sync to the cloud within 3 seconds. Works across all your devices.</div>
           </div>
-          <label className="toggle">
-            <input type="checkbox" checked={autoBackup} onChange={e => toggleAutoBackup(e.target.checked)} />
-            <span className="toggle-slider" />
-          </label>
+          <span style={{ fontSize: 20 }}>✓</span>
         </div>
       </div>
 
@@ -1249,12 +1223,65 @@ service cloud.firestore {
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [data, save] = useStorage();
-  const [tab, setTab] = useState("log");
+  const [data, save]         = useStorage();
+  const [tab, setTab]        = useState("log");
   const [toastMsg, setToastMsg] = useState("");
-  const isOnline = useOnlineStatus();
+  const isOnline             = useOnlineStatus();
+  const toast                = (msg) => setToastMsg(msg);
 
-  const toast = (msg) => setToastMsg(msg);
+  // ── Auth state (shared with BackupTab) ────────────────────────────────────
+  const [user, setUser]           = useState(null);
+  const [syncStatus, setSyncStatus] = useState(null); // null|"syncing"|"synced"|"error"
+
+  // Refs for loop prevention
+  const lastWriteRef         = useRef(localStorage.getItem("htLastSync") || "");
+  const isSyncingFromRemote  = useRef(false);
+  const debounceRef          = useRef(null);
+
+  // Listen to Firebase auth state once on mount
+  useEffect(() => {
+    const unsub = listenAuthState(setUser);
+    return unsub;
+  }, []);
+
+  // Subscribe to real-time Firestore snapshot when user signs in
+  useEffect(() => {
+    if (!user || !IS_CONFIGURED) return;
+    const unsub = subscribeToCloud(user.uid, ({ data: remoteData, updatedAt }) => {
+      // Ignore the echo of our own write
+      if (updatedAt <= lastWriteRef.current) return;
+      // Remote is newer — apply it locally without triggering another write
+      isSyncingFromRemote.current = true;
+      save(remoteData);
+      lastWriteRef.current = updatedAt;
+      localStorage.setItem("htLastSync", updatedAt);
+      setSyncStatus("synced");
+    });
+    return unsub;
+  }, [user]); // eslint-disable-line
+
+  // Debounce-write local changes to Firestore (3 s after last change)
+  useEffect(() => {
+    if (!user || !IS_CONFIGURED || !isOnline) return;
+    if (isSyncingFromRemote.current) {
+      // This data change came from the snapshot — don't echo back
+      isSyncingFromRemote.current = false;
+      return;
+    }
+    setSyncStatus("syncing");
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const ts = await backupToCloud(data);
+        lastWriteRef.current = ts;
+        localStorage.setItem("htLastSync", ts);
+        setSyncStatus("synced");
+      } catch {
+        setSyncStatus("error");
+      }
+    }, 3000);
+    return () => clearTimeout(debounceRef.current);
+  }, [data, user, isOnline]); // eslint-disable-line
 
   const TABS = [
     { id: "log",     label: "📝 Log Check" },
@@ -1265,6 +1292,12 @@ export default function App() {
     { id: "backup",  label: "☁ Backup" },
   ];
 
+  // Sync status pill shown in header when signed in
+  const syncLabel = syncStatus === "syncing" ? "⟳ Syncing"
+    : syncStatus === "synced"  ? "✓ Synced"
+    : syncStatus === "error"   ? "⚠ Sync error"
+    : null;
+
   return (
     <>
       <style>{STYLES}</style>
@@ -1274,10 +1307,26 @@ export default function App() {
             <div className="header-title">Metric<span>Health</span></div>
             <div className="header-sub">Daily health metrics · {data.persons.length} persons · {data.records.length} records</div>
           </div>
-          <span className={`online-badge ${isOnline ? 'online' : 'offline'}`}>
-            <span className="status-dot" />
-            {isOnline ? 'Online' : 'Offline'}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {user && syncLabel && (
+              <span style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "4px 10px",
+                borderRadius: 20,
+                background: syncStatus === "syncing" ? "var(--teal-light)" : syncStatus === "error" ? "var(--rose-light)" : "var(--teal-light)",
+                color: syncStatus === "error" ? "var(--rose)" : "var(--teal-dark)",
+                letterSpacing: "0.04em",
+              }}>
+                {syncLabel}
+              </span>
+            )}
+            <span className={`online-badge ${isOnline ? 'online' : 'offline'}`}>
+              <span className="status-dot" />
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
+          </div>
         </div>
         {!isOnline && (
           <div className="offline-banner">
@@ -1298,7 +1347,7 @@ export default function App() {
         {tab === "charts"  && <ChartsTab data={data} />}
         {tab === "persons" && <PersonsTab data={data} save={save} toast={toast} />}
         {tab === "checks"  && <CheckTypesTab data={data} save={save} toast={toast} />}
-        {tab === "backup"  && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} />}
+        {tab === "backup"  && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} user={user} syncStatus={syncStatus} />}
       </div>
       {toastMsg && <Toast msg={toastMsg} onDone={() => setToastMsg("")} />}
     </>

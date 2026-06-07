@@ -5,7 +5,7 @@ import {
   onAuthStateChanged,
 } from "firebase/auth";
 import {
-  getFirestore, doc, setDoc, getDoc,
+  getFirestore, doc, setDoc, getDoc, onSnapshot,
 } from "firebase/firestore";
 import { firebaseConfig, IS_CONFIGURED } from "./firebaseConfig.js";
 
@@ -50,6 +50,23 @@ export async function backupToCloud(data) {
     recordCount: data.records.length,
   });
   return updatedAt;
+}
+
+/**
+ * Subscribe to real-time changes for the signed-in user's backup document.
+ * Calls onData({ data, updatedAt }) whenever the Firestore document changes.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToCloud(uid, onData) {
+  if (!IS_CONFIGURED) return () => {};
+  const { db } = getServices();
+  return onSnapshot(doc(db, "backups", uid), (snap) => {
+    if (!snap.exists()) return;
+    const { payload, updatedAt } = snap.data();
+    try {
+      onData({ data: JSON.parse(payload), updatedAt });
+    } catch {}
+  });
 }
 
 export async function restoreFromCloud() {
