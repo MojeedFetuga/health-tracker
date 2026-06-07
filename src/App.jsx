@@ -210,6 +210,24 @@ const STYLES = `
   .setup-guide code { font-family: 'DM Mono', monospace; background: rgba(0,0,0,0.08); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
   .setup-guide a { color: var(--teal-dark); }
 
+  /* REMINDERS TAB */
+  .reminder-permission { display: flex; align-items: center; gap: 14px; background: var(--amber-light); border: 1.5px solid #fde68a; border-radius: 14px; padding: 16px 18px; margin-bottom: 20px; }
+  .reminder-permission-icon { font-size: 28px; flex-shrink: 0; }
+  .reminder-permission h4 { font-size: 14px; font-weight: 700; margin-bottom: 3px; color: #92400e; }
+  .reminder-permission p { font-size: 12px; color: #92400e; opacity: 0.85; margin: 0; line-height: 1.5; }
+  .reminder-list { display: flex; flex-direction: column; gap: 14px; }
+  .reminder-row { display: flex; align-items: center; gap: 16px; padding: 18px 20px; background: var(--white); border: 1.5px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); flex-wrap: wrap; }
+  .reminder-icon { font-size: 28px; flex-shrink: 0; }
+  .reminder-info { flex: 1; min-width: 120px; }
+  .reminder-label { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+  .reminder-sub { font-size: 12px; color: var(--slate); font-family: 'DM Mono', monospace; }
+  .reminder-time { font-family: 'DM Mono', monospace; font-size: 14px; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--cream); color: var(--ink); outline: none; }
+  .reminder-time:focus { border-color: var(--teal); }
+  .perm-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; }
+  .perm-granted { background: var(--teal-light); color: var(--teal-dark); }
+  .perm-denied  { background: var(--rose-light);  color: var(--rose); }
+  .perm-default { background: var(--amber-light); color: #92400e; }
+
   /* RANGE ALERTS */
   .range-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; white-space: nowrap; }
   .alert-box { border-radius: 10px; padding: 11px 14px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; line-height: 1.5; }
@@ -1020,6 +1038,191 @@ const GOOGLE_SVG = (
   </svg>
 );
 
+// ── REMINDERS HOOK ────────────────────────────────────────────────────────────
+const REMINDER_KEY = "mh_reminders_v1";
+const DEFAULT_REMINDERS = {
+  morning: { enabled: false, time: "08:00" },
+  evening: { enabled: false, time: "20:00" },
+};
+
+function useReminders() {
+  const [config, _setConfig] = useState(() => {
+    try {
+      const raw = localStorage.getItem(REMINDER_KEY);
+      if (raw) return { ...DEFAULT_REMINDERS, ...JSON.parse(raw) };
+    } catch {}
+    return DEFAULT_REMINDERS;
+  });
+
+  const setConfig = (next) => {
+    _setConfig(next);
+    localStorage.setItem(REMINDER_KEY, JSON.stringify(next));
+  };
+
+  const [permission, setPermission] = useState(
+    () => (typeof Notification !== "undefined" ? Notification.permission : "unsupported")
+  );
+
+  const shownTodayRef = useRef({});
+
+  // Check every 60 s whether it is time to fire a notification
+  useEffect(() => {
+    const check = () => {
+      if (permission !== "granted") return;
+      const now   = new Date();
+      const hhmm  = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const today = now.toISOString().slice(0, 10);
+      const cfg   = JSON.parse(localStorage.getItem(REMINDER_KEY) || "{}");
+
+      const slots = [
+        { key: "morning", icon: "🌅", label: "Morning" },
+        { key: "evening", icon: "🌙", label: "Evening" },
+      ];
+
+      for (const { key, icon, label } of slots) {
+        const slot = cfg[key] || DEFAULT_REMINDERS[key];
+        if (!slot.enabled) continue;
+        if (slot.time !== hhmm) continue;
+        if (shownTodayRef.current[key] === today) continue;
+        shownTodayRef.current[key] = today;
+        try {
+          new Notification(`${icon} MetricHealth — ${label} check`, {
+            body: `Time to log your ${label.toLowerCase()} health readings!`,
+            icon: "/favicon.svg",
+            tag:  `metrichealth-${key}`,
+          });
+        } catch {}
+      }
+    };
+
+    check(); // run immediately on mount (catches app opened exactly at reminder time)
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, [permission]);
+
+  const requestPermission = async () => {
+    if (typeof Notification === "undefined") return;
+    const result = await Notification.requestPermission();
+    setPermission(result);
+    return result;
+  };
+
+  return { config, setConfig, permission, requestPermission };
+}
+
+// ── REMINDERS TAB ─────────────────────────────────────────────────────────────
+function RemindersTab({ data }) {
+  const { config, setConfig, permission, requestPermission } = useReminders();
+  const [testSent, setTestSent] = useState(false);
+
+  const updateSlot = (key, patch) =>
+    setConfig({ ...config, [key]: { ...config[key], ...patch } });
+
+  const sendTest = () => {
+    if (permission !== "granted") return;
+    new Notification("🔔 MetricHealth — Test reminder", {
+      body: "Reminders are working! You'll see alerts like this at your chosen times.",
+      icon: "/favicon.svg",
+      tag:  "metrichealth-test",
+    });
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 3000);
+  };
+
+  const permClass = permission === "granted" ? "perm-granted"
+    : permission === "denied"  ? "perm-denied"
+    : "perm-default";
+
+  const permLabel = permission === "granted" ? "✓ Notifications allowed"
+    : permission === "denied"  ? "✕ Notifications blocked"
+    : "⚠ Permission not granted";
+
+  const SLOTS = [
+    { key: "morning", icon: "🌅", label: "Morning reminder", sub: "Remind me to log my morning check" },
+    { key: "evening", icon: "🌙", label: "Evening reminder",  sub: "Remind me to log my evening check" },
+  ];
+
+  return (
+    <div>
+      <div className="card">
+        <div className="card-title"><span className="dot" />Push Reminders</div>
+        <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 20, lineHeight: 1.6 }}>
+          Set daily alerts so you never forget to log a reading. Notifications appear even when MetricHealth is in the background, as long as your browser tab is open.
+        </p>
+
+        {/* Permission status */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+          <span className={`perm-badge ${permClass}`}>{permLabel}</span>
+          {permission !== "granted" && permission !== "denied" && (
+            <button className="btn btn-primary btn-sm" onClick={requestPermission}>
+              Enable notifications
+            </button>
+          )}
+          {permission === "denied" && (
+            <span style={{ fontSize: 12, color: "var(--slate)" }}>
+              Re-enable in your browser's site settings
+            </span>
+          )}
+          {permission === "granted" && (
+            <button className="btn btn-secondary btn-sm" onClick={sendTest} disabled={testSent}>
+              {testSent ? "✓ Sent!" : "Send test"}
+            </button>
+          )}
+        </div>
+
+        {permission === "denied" && (
+          <div className="reminder-permission" style={{ marginBottom: 20 }}>
+            <div className="reminder-permission-icon">🔕</div>
+            <div>
+              <h4>Notifications are blocked</h4>
+              <p>Click the lock icon in your browser's address bar → Notifications → Allow, then reload the page.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Reminder slots */}
+        <div className="reminder-list">
+          {SLOTS.map(({ key, icon, label, sub }) => (
+            <div key={key} className="reminder-row">
+              <div className="reminder-icon">{icon}</div>
+              <div className="reminder-info">
+                <div className="reminder-label">{label}</div>
+                <div className="reminder-sub">{sub}</div>
+              </div>
+              <input
+                type="time"
+                className="reminder-time"
+                value={config[key].time}
+                onChange={e => updateSlot(key, { time: e.target.value })}
+                disabled={!config[key].enabled}
+              />
+              <label className="toggle" title={config[key].enabled ? "Disable" : "Enable"}>
+                <input
+                  type="checkbox"
+                  checked={config[key].enabled}
+                  onChange={e => updateSlot(key, { enabled: e.target.checked })}
+                />
+                <span className="toggle-slider" />
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Info card */}
+      <div className="card" style={{ background: "var(--teal-light)", border: "1.5px solid #99f6e4" }}>
+        <div className="card-title" style={{ color: "var(--teal-dark)" }}><span className="dot" style={{ background: "var(--teal)" }} />How reminders work</div>
+        <ul style={{ fontSize: 13, color: "var(--teal-dark)", lineHeight: 2, paddingLeft: 18, margin: 0 }}>
+          <li>Reminders fire once per day at the time you set</li>
+          <li>The browser tab must be open (background tabs still work)</li>
+          <li>Your times are saved locally and never sent to a server</li>
+          <li>Use <strong>Send test</strong> to confirm notifications are working</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function BackupTab({ data, save, toast, isOnline, user, syncStatus }) {
   const [authLoading, setAuthLoading] = useState(false);
   const [lastBackup, setLastBackup]   = useState(() => localStorage.getItem("htLastSync") || null);
@@ -1284,12 +1487,13 @@ export default function App() {
   }, [data, user, isOnline]); // eslint-disable-line
 
   const TABS = [
-    { id: "log",     label: "📝 Log Check" },
-    { id: "records", label: "📊 Records" },
-    { id: "charts",  label: "📈 Charts" },
-    { id: "persons", label: "👤 Persons" },
-    { id: "checks",  label: "🩺 Check Types" },
-    { id: "backup",  label: "☁ Backup" },
+    { id: "log",       label: "📝 Log Check" },
+    { id: "records",   label: "📊 Records" },
+    { id: "charts",    label: "📈 Charts" },
+    { id: "persons",   label: "👤 Persons" },
+    { id: "checks",    label: "🩺 Check Types" },
+    { id: "reminders", label: "🔔 Reminders" },
+    { id: "backup",    label: "☁ Backup" },
   ];
 
   // Sync status pill shown in header when signed in
@@ -1342,12 +1546,13 @@ export default function App() {
           ))}
         </div>
 
-        {tab === "log"     && <LogCheckTab data={data} save={save} toast={toast} />}
-        {tab === "records" && <RecordsTab data={data} save={save} toast={toast} />}
-        {tab === "charts"  && <ChartsTab data={data} />}
-        {tab === "persons" && <PersonsTab data={data} save={save} toast={toast} />}
-        {tab === "checks"  && <CheckTypesTab data={data} save={save} toast={toast} />}
-        {tab === "backup"  && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} user={user} syncStatus={syncStatus} />}
+        {tab === "log"       && <LogCheckTab data={data} save={save} toast={toast} />}
+        {tab === "records"   && <RecordsTab data={data} save={save} toast={toast} />}
+        {tab === "charts"    && <ChartsTab data={data} />}
+        {tab === "persons"   && <PersonsTab data={data} save={save} toast={toast} />}
+        {tab === "checks"    && <CheckTypesTab data={data} save={save} toast={toast} />}
+        {tab === "reminders" && <RemindersTab data={data} />}
+        {tab === "backup"    && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} user={user} syncStatus={syncStatus} />}
       </div>
       {toastMsg && <Toast msg={toastMsg} onDone={() => setToastMsg("")} />}
     </>
