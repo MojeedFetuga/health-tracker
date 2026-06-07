@@ -306,6 +306,47 @@ const STYLES = `
     .card > * { max-width: 100%; }
     pre { overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
   }
+
+  /* ── DARK MODE ──────────────────────────────────────────────────────────── */
+  [data-theme="dark"] {
+    --cream:       #0d1117;
+    --ink:         #e2e8f0;
+    --teal:        #2dd4bf;
+    --teal-light:  #0d3330;
+    --teal-dark:   #5eead4;
+    --amber:       #fbbf24;
+    --amber-light: #2d1a00;
+    --rose:        #fb7185;
+    --rose-light:  #3b0a1a;
+    --slate:       #94a3b8;
+    --slate-light: #161b22;
+    --white:       #161b22;
+    --border:      #30363d;
+    --shadow:      0 4px 24px rgba(0,0,0,0.45);
+    --shadow-lg:   0 8px 40px rgba(0,0,0,0.65);
+  }
+  /* Elements that use --ink as a dark background — override explicitly */
+  [data-theme="dark"] .tabs       { background: #1e293b; }
+  [data-theme="dark"] .tab        { color: rgba(255,255,255,0.45); }
+  [data-theme="dark"] .tab.active { background: #334155; color: var(--ink); }
+  [data-theme="dark"] table thead th { background: #1e293b; color: #e2e8f0; }
+  [data-theme="dark"] tr:nth-child(even) td { background: rgba(255,255,255,0.025); }
+  [data-theme="dark"] .header     { border-bottom-color: var(--border); }
+  [data-theme="dark"] .offline-banner { background: #2d1a00; border-color: #92400e; color: #fbbf24; }
+  [data-theme="dark"] .setup-guide { background: var(--amber-light); border-color: #92400e; }
+  [data-theme="dark"] .setup-guide h4,
+  [data-theme="dark"] .setup-guide ol,
+  [data-theme="dark"] .setup-guide p { color: #fbbf24; }
+  [data-theme="dark"] .btn-google { background: #1e293b; color: var(--ink); border: 1.5px solid var(--border); }
+  [data-theme="dark"] .backup-center-icon { color: var(--teal); }
+  [data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+  [data-theme="dark"] .modal { background: #1e293b; }
+  [data-theme="dark"] .dark-toggle { border-color: var(--border); color: var(--ink); background: var(--white); }
+  [data-theme="dark"] .dark-toggle:hover { background: #334155; }
+
+  /* Dark toggle button (shared) */
+  .dark-toggle { border: 1.5px solid var(--border); border-radius: 20px; padding: 5px 13px; cursor: pointer; font-size: 15px; background: transparent; color: var(--ink); transition: background 0.2s; line-height: 1; }
+  .dark-toggle:hover { background: var(--slate-light); }
 `;
 
 function useOnlineStatus() {
@@ -1795,6 +1836,13 @@ export default function App() {
   const isOnline             = useOnlineStatus();
   const toast                = (msg) => setToastMsg(msg);
 
+  // ── Dark mode ─────────────────────────────────────────────────────────────
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("mh_theme") === "dark");
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    localStorage.setItem("mh_theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
+
   // ── Auth state (shared with BackupTab) ────────────────────────────────────
   const [user, setUser]           = useState(null);
   const [syncStatus, setSyncStatus] = useState(null); // null|"syncing"|"synced"|"error"
@@ -1875,6 +1923,9 @@ export default function App() {
             <div className="header-sub">Daily health metrics · {data.persons.length} persons · {data.records.length} records</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button className="dark-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
+              {darkMode ? "☀️" : "🌙"}
+            </button>
             {user && syncLabel && (
               <span style={{
                 fontFamily: "'DM Mono', monospace",
