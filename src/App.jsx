@@ -872,6 +872,141 @@ function RecordsTab({ data, save, toast }) {
     toast(`Report downloaded for ${person.name}`);
   };
 
+  const printReport = (personId) => {
+    const person = data.persons.find(p => p.id === personId);
+    if (!person) return;
+
+    const allRecs = data.records
+      .filter(r => r.personId === personId)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+
+    if (allRecs.length === 0) { toast("No records to print for this person"); return; }
+
+    const generated = new Date().toLocaleString("en-GB", {
+      day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+    const oldest = allRecs[allRecs.length - 1].date;
+    const newest = allRecs[0].date;
+
+    // Group records by check type, pre-compute range info (getRangeInfo is in main scope)
+    const sections = data.checkTypes
+      .map(ct => ({ ct, recs: allRecs.filter(r => r.checkTypeId === ct.id) }))
+      .filter(({ recs }) => recs.length > 0);
+
+    const badgeStyle = (status) => {
+      const map = {
+        normal:   "background:#ccfbf1;color:#0f766e",
+        elevated: "background:#fef3c7;color:#92400e",
+        high:     "background:#ffe4e6;color:#e11d48",
+        crisis:   "background:#fee2e2;color:#b91c1c",
+        low:      "background:#ede9fe;color:#7c3aed",
+      };
+      return map[status] || "";
+    };
+
+    const tableRows = sections.map(({ ct, recs }) => `
+      <div class="section">
+        <h3>${ct.name}${ct.unit ? ` <span class="unit">${ct.unit}</span>` : ""}</h3>
+        <table>
+          <thead><tr><th>Date</th><th>Session</th><th>Value</th><th>Status</th><th>Notes</th></tr></thead>
+          <tbody>
+            ${recs.map(r => {
+              const info = getRangeInfo(ct.name, ct.unit, r.value);
+              return `<tr>
+                <td class="mono">${r.date}</td>
+                <td><span class="pill ${r.session === "Morning" ? "pill-am" : "pill-pm"}">${r.session}</span></td>
+                <td class="mono bold">${r.value}${ct.unit ? " " + ct.unit : ""}</td>
+                <td>${info ? `<span class="pill" style="${badgeStyle(info.status)}">${info.label}</span>` : "<span style='color:#94a3b8'>—</span>"}</td>
+                <td class="note">${r.notes || "—"}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MetricHealth — ${person.name}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Syne',Arial,sans-serif;color:#1a1a2e;background:#fff;padding:36px 48px;font-size:13px;line-height:1.5}
+    /* Header */
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #1a1a2e;padding-bottom:14px;margin-bottom:22px}
+    .brand{font-family:'DM Serif Display',serif;font-size:30px;line-height:1}
+    .brand span{color:#0d9488;font-style:italic}
+    .brand-sub{font-size:10px;color:#64748b;font-family:'DM Mono',monospace;letter-spacing:.07em;text-transform:uppercase;margin-top:4px}
+    .meta{text-align:right;font-family:'DM Mono',monospace;font-size:10.5px;color:#64748b;line-height:1.7}
+    /* Patient box */
+    .patient{background:#f5f0e8;border-radius:10px;padding:16px 20px;margin-bottom:24px;display:grid;grid-template-columns:1fr 1fr;gap:8px 32px}
+    .prow{display:flex;gap:8px;align-items:baseline}
+    .plabel{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace;flex-shrink:0;min-width:56px}
+    .pval{font-weight:700;font-size:14px}
+    .full{grid-column:1/-1}
+    /* Sections */
+    .section{margin-bottom:24px;page-break-inside:avoid}
+    .section h3{font-family:'DM Serif Display',serif;font-size:15px;border-bottom:1.5px solid #e2e8f0;padding-bottom:6px;margin-bottom:8px}
+    .unit{font-family:'DM Mono',monospace;font-size:11px;color:#64748b;font-weight:400;font-style:normal}
+    /* Table */
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{text-align:left;padding:6px 10px;background:#1a1a2e;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-family:'DM Mono',monospace}
+    td{padding:7px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:nth-child(even) td{background:#f8fafc}
+    .mono{font-family:'DM Mono',monospace}
+    .bold{font-weight:700}
+    .note{color:#64748b;font-size:11px}
+    /* Pills */
+    .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;font-family:'DM Mono',monospace;letter-spacing:.03em}
+    .pill-am{background:#fef3c7;color:#92400e}
+    .pill-pm{background:#e0e7ff;color:#3730a3}
+    /* Footer */
+    .footer{margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9.5px;color:#94a3b8}
+    @media print{
+      body{padding:0}
+      @page{margin:1.8cm;size:A4}
+      .section{page-break-inside:avoid}
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">Metric<span>Health</span></div>
+      <div class="brand-sub">Patient Health Report</div>
+    </div>
+    <div class="meta">
+      <div>Generated: ${generated}</div>
+      <div>Period: ${oldest} → ${newest}</div>
+      <div>${allRecs.length} total record${allRecs.length !== 1 ? "s" : ""}</div>
+    </div>
+  </div>
+
+  <div class="patient">
+    <div class="prow"><span class="plabel">Patient</span><span class="pval">${person.name}</span></div>
+    <div class="prow"><span class="plabel">Age</span><span class="pval">${person.age || "—"}</span></div>
+    ${person.notes ? `<div class="prow full"><span class="plabel">Notes</span><span class="pval" style="font-weight:400">${person.notes}</span></div>` : ""}
+  </div>
+
+  ${tableRows}
+
+  <div class="footer">
+    <span>MetricHealth · metrichealth.vercel.app</span>
+    <span>For informational purposes only. Consult a qualified medical professional for diagnosis and treatment.</span>
+  </div>
+
+  <script>setTimeout(()=>window.print(),400);<\/script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) { toast("Allow pop-ups for this site to print reports"); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
   const selectedEditCheck = data.checkTypes.find(c => c.id === ef.checkTypeId);
 
   return (
@@ -981,7 +1116,8 @@ function RecordsTab({ data, save, toast }) {
                 <div className="person-name">{p.name}</div>
                 <div className="person-meta">{data.records.filter(r => r.personId === p.id).length} records</div>
                 <div className="person-actions">
-                  <button className="btn btn-amber btn-sm" onClick={() => downloadReport(p.id)}>⬇ Excel Report</button>
+                  <button className="btn btn-amber btn-sm" onClick={() => downloadReport(p.id)}>⬇ Excel</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => printReport(p.id)}>🖨 Print</button>
                 </div>
               </div>
             ))}
