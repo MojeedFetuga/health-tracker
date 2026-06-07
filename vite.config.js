@@ -18,9 +18,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Health Tracker',
-        short_name: 'HealthTrack',
-        description: 'Daily health check-up records — works offline',
+        name: 'MetricHealth',
+        short_name: 'MetricHealth',
+        description: 'Track your daily health metrics — works offline, backs up to the cloud.',
         theme_color: '#0d9488',
         background_color: '#f5f0e8',
         display: 'standalone',

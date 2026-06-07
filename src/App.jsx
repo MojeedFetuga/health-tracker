@@ -905,8 +905,8 @@ export default function App() {
       <div className="app">
         <div className="header">
           <div>
-            <div className="header-title">Health <span>Tracker</span></div>
-            <div className="header-sub">Daily check-up records · {data.persons.length} persons · {data.records.length} records</div>
+            <div className="header-title">Metric<span>Health</span></div>
+            <div className="header-sub">Daily health metrics · {data.persons.length} persons · {data.records.length} records</div>
           </div>
           <span className={`online-badge ${isOnline ? 'online' : 'offline'}`}>
             <span className="status-dot" />
