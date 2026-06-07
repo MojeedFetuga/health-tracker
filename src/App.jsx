@@ -5,7 +5,9 @@ import { IS_CONFIGURED } from "./firebaseConfig.js";
 import {
   listenAuthState, signInWithGoogle, signOut,
   backupToCloud, restoreFromCloud, subscribeToCloud,
+  setProStatus, subscribeProStatus,
 } from "./cloudBackup.js";
+import { PAYSTACK_PUBLIC_KEY, PLANS, IS_PAYSTACK_CONFIGURED } from "./paystackConfig.js";
 
 const STORAGE_KEY = "healthtracker_v1";
 
@@ -385,6 +387,33 @@ const STYLES = `
   /* Dark toggle button (shared) */
   .dark-toggle { border: 1.5px solid var(--border); border-radius: 20px; padding: 5px 13px; cursor: pointer; font-size: 15px; background: transparent; color: var(--ink); transition: background 0.2s; line-height: 1; }
   .dark-toggle:hover { background: var(--slate-light); }
+
+  /* ── PRO / UPGRADE ───────────────────────────────────────────────────────── */
+  .pro-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: 0.05em; background: linear-gradient(135deg,#f59e0b,#d97706); color: #fff; box-shadow: 0 2px 8px rgba(217,119,6,0.35); }
+  .btn-gold { background: linear-gradient(135deg,#f59e0b,#d97706); color: #fff; border: none; box-shadow: 0 3px 12px rgba(217,119,6,0.35); }
+  .btn-gold:hover { background: linear-gradient(135deg,#d97706,#b45309); transform: translateY(-1px); box-shadow: 0 4px 18px rgba(217,119,6,0.5); }
+
+  /* Pro gate — shown when a feature is locked */
+  .pro-gate { border: 2px dashed #f59e0b; border-radius: 14px; padding: 28px 24px; text-align: center; background: linear-gradient(135deg, rgba(245,158,11,0.06), rgba(217,119,6,0.04)); margin-bottom: 20px; }
+  .pro-gate-icon { font-size: 36px; margin-bottom: 10px; }
+  .pro-gate h3 { font-family: 'DM Serif Display', serif; font-size: 20px; margin-bottom: 8px; color: var(--ink); }
+  .pro-gate p { font-size: 13px; color: var(--slate); margin-bottom: 18px; line-height: 1.6; max-width: 360px; margin-left: auto; margin-right: auto; }
+
+  /* Upgrade modal */
+  .upgrade-modal-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  @media (max-width: 440px) { .upgrade-modal-plans { grid-template-columns: 1fr; } }
+  .plan-card { border: 2px solid var(--border); border-radius: 14px; padding: 18px 16px; cursor: pointer; transition: all 0.18s; position: relative; }
+  .plan-card:hover { border-color: #f59e0b; }
+  .plan-card.selected { border-color: #f59e0b; background: rgba(245,158,11,0.06); }
+  .plan-card-badge { position: absolute; top: -10px; right: 12px; background: #d97706; color: #fff; font-size: 10px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: 0.05em; padding: 2px 10px; border-radius: 20px; }
+  .plan-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .plan-price { font-family: 'DM Serif Display', serif; font-size: 26px; color: var(--teal); line-height: 1.1; }
+  .plan-period { font-size: 12px; color: var(--slate); font-family: 'DM Mono', monospace; margin-bottom: 10px; }
+  .pro-features-list { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
+  .pro-features-list li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .pro-features-list li span.check { color: var(--teal); font-weight: 700; font-size: 16px; flex-shrink: 0; }
+  .pro-features-list li span.lock  { color: var(--slate); font-size: 15px; flex-shrink: 0; }
+  [data-theme="dark"] .plan-card.selected { background: rgba(245,158,11,0.1); }
 `;
 
 function useOnlineStatus() {
@@ -664,7 +693,7 @@ function Toast({ msg, onDone }) {
 }
 
 // ── PERSONS TAB ───────────────────────────────────────────────────────────────
-function PersonsTab({ data, save, toast }) {
+function PersonsTab({ data, save, toast, isPro, onUpgrade }) {
   const [name, setName]   = useState("");
   const [age, setAge]     = useState("");
   const [notes, setNotes] = useState("");
@@ -727,24 +756,33 @@ function PersonsTab({ data, save, toast }) {
         </div>
       )}
 
-      <div className="card">
-        <div className="card-title"><span className="dot" />Add New Person</div>
-        <div className="form-grid">
-          <div className="form-group">
-            <label>Full Name *</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Amaka Johnson" />
+      {/* Pro gate: only 1 person on free plan */}
+      {data.persons.length >= 1 && !isPro ? (
+        <ProGate
+          title="Add More Persons — Pro Feature"
+          description="The free plan includes 1 person. Upgrade to Pro to track unlimited family members."
+          onUpgrade={onUpgrade}
+        />
+      ) : (
+        <div className="card">
+          <div className="card-title"><span className="dot" />Add New Person</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Full Name *</label>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Amaka Johnson" />
+            </div>
+            <div className="form-group">
+              <label>Age</label>
+              <input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="e.g. 34" />
+            </div>
+            <div className="form-group">
+              <label>Notes</label>
+              <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note" />
+            </div>
           </div>
-          <div className="form-group">
-            <label>Age</label>
-            <input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="e.g. 34" />
-          </div>
-          <div className="form-group">
-            <label>Notes</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note" />
-          </div>
+          <button className="btn btn-primary btn-full mt-4" onClick={add}>+ Add Person</button>
         </div>
-        <button className="btn btn-primary btn-full mt-4" onClick={add}>+ Add Person</button>
-      </div>
+      )}
 
       <div className="card">
         <div className="card-title"><span className="dot" />All Persons ({data.persons.length})</div>
@@ -925,7 +963,7 @@ function LogCheckTab({ data, save, toast }) {
 }
 
 // ── RECORDS TAB ───────────────────────────────────────────────────────────────
-function RecordsTab({ data, save, toast }) {
+function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
   const [filterPerson, setFilterPerson] = useState("");
   const [filterCheck, setFilterCheck] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
@@ -1405,7 +1443,13 @@ function RecordsTab({ data, save, toast }) {
       <div className="card">
         <div className="card-title"><span className="dot" />Import from Excel</div>
 
-        {!importPreview ? (
+        {!isPro ? (
+          <ProGate
+            title="Import from Excel — Pro"
+            description="Bulk-import records from .xlsx files. Upgrade to Pro to use this feature."
+            onUpgrade={onUpgrade}
+          />
+        ) : !importPreview ? (
           <>
             <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 16, lineHeight: 1.6 }}>
               Upload a MetricHealth Excel export (or any <code style={{ fontFamily:"'DM Mono',monospace", fontSize:11, background:"var(--slate-light)", padding:"1px 5px", borderRadius:4 }}>.xlsx</code> file with columns: <strong>Date, Check Type, Value, Unit, Session, Notes</strong>). Duplicates are skipped automatically.
@@ -1444,7 +1488,13 @@ function RecordsTab({ data, save, toast }) {
       {/* Download by person */}
       <div className="card">
         <div className="card-title"><span className="dot" />Download Individual Reports</div>
-        {data.persons.length === 0 ? (
+        {!isPro ? (
+          <ProGate
+            title="Export & Share Reports — Pro"
+            description="Download Excel files, print doctor reports, and share via WhatsApp or email. Upgrade to Pro."
+            onUpgrade={onUpgrade}
+          />
+        ) : data.persons.length === 0 ? (
           <p className="text-sm text-slate">No persons yet.</p>
         ) : (
           <div className="person-grid">
@@ -1811,10 +1861,166 @@ function useReminders() {
   return { config, setConfig, permission, requestPermission };
 }
 
+// ── PRO STATUS HOOK ───────────────────────────────────────────────────────────
+function usePro(user) {
+  const [isPro, setIsPro] = useState(() => {
+    // Optimistic restore from localStorage cache
+    try {
+      const raw = localStorage.getItem("mh_pro_v1");
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      return !!(d.pro && (!d.expiresAt || new Date(d.expiresAt) >= new Date()));
+    } catch { return false; }
+  });
+
+  useEffect(() => {
+    if (!user || !IS_CONFIGURED) return;
+    const unsub = subscribeProStatus(user.uid, setIsPro);
+    return unsub;
+  }, [user]);
+
+  return isPro;
+}
+
+// ── PAYSTACK LOADER ───────────────────────────────────────────────────────────
+function loadPaystack() {
+  return new Promise((resolve, reject) => {
+    if (window.PaystackPop) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = "https://js.paystack.co/v1/inline.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("Paystack failed to load"));
+    document.head.appendChild(s);
+  });
+}
+
+// ── UPGRADE MODAL ─────────────────────────────────────────────────────────────
+function UpgradeModal({ user, onClose, toast, onProActivated }) {
+  const [selected, setSelected] = useState("yearly");
+  const [paying, setPaying]     = useState(false);
+  const plan = PLANS[selected];
+
+  const pay = async () => {
+    if (!IS_PAYSTACK_CONFIGURED) {
+      toast("Paystack key not configured yet — contact the app owner");
+      return;
+    }
+    if (!user) {
+      toast("Please sign in with Google first (Backup tab) to unlock Pro");
+      return;
+    }
+    setPaying(true);
+    try {
+      await loadPaystack();
+      const handler = window.PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: user.email,
+        amount: plan.amount,
+        currency: "NGN",
+        ref: "MH-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
+        metadata: { uid: user.uid, plan: selected },
+        onSuccess: async (res) => {
+          try {
+            await setProStatus({ plan: selected, ref: res.reference });
+            toast("🎉 Pro activated! Welcome to MetricHealth Pro");
+            onProActivated?.();
+            onClose();
+          } catch (e) {
+            toast("Payment received but activation failed — please contact support with ref: " + res.reference);
+          }
+        },
+        onCancel: () => { setPaying(false); },
+      });
+      handler.openIframe();
+    } catch {
+      toast("Could not load payment page — check your connection and try again");
+      setPaying(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 24 }}>⭐</span>
+          <span>Upgrade to <span style={{ color: "#d97706" }}>Pro</span></span>
+        </div>
+
+        <ul className="pro-features-list">
+          <li><span className="check">✓</span> <strong>Unlimited persons</strong> — track the whole family</li>
+          <li><span className="check">✓</span> <strong>Cloud backup & real-time sync</strong> — data follows you</li>
+          <li><span className="check">✓</span> <strong>Excel export</strong> — download reports as .xlsx</li>
+          <li><span className="check">✓</span> <strong>Print reports</strong> — clean one-page doctor summary</li>
+          <li><span className="check">✓</span> <strong>Share via WhatsApp/email</strong> — send reports instantly</li>
+          <li><span className="check">✓</span> <strong>Push reminders</strong> — daily morning & evening alerts</li>
+        </ul>
+
+        <div className="upgrade-modal-plans">
+          {Object.entries(PLANS).map(([key, p]) => (
+            <div
+              key={key}
+              className={`plan-card${selected === key ? " selected" : ""}`}
+              onClick={() => setSelected(key)}
+            >
+              {p.badge && <div className="plan-card-badge">{p.badge}</div>}
+              <div className="plan-name">{key === "monthly" ? "Monthly" : "Yearly"}</div>
+              <div className="plan-price">{p.label}</div>
+              <div className="plan-period">{p.period}</div>
+            </div>
+          ))}
+        </div>
+
+        {!user && (
+          <div className="msg-bar info" style={{ marginBottom: 12 }}>
+            ℹ Sign in with Google (Backup tab) to activate Pro after payment
+          </div>
+        )}
+
+        {!IS_PAYSTACK_CONFIGURED && (
+          <div className="msg-bar info" style={{ marginBottom: 12 }}>
+            ℹ Demo mode — add your Paystack public key to enable payments
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn btn-secondary" onClick={onClose}>Maybe later</button>
+          <button className="btn btn-gold btn-full" onClick={pay} disabled={paying} style={{ flex: 2 }}>
+            {paying ? "Opening payment…" : `⭐ Unlock Pro — ${plan.label}${plan.period}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PRO GATE ──────────────────────────────────────────────────────────────────
+function ProGate({ title, description, onUpgrade }) {
+  return (
+    <div className="pro-gate">
+      <div className="pro-gate-icon">⭐</div>
+      <h3>{title || "Pro Feature"}</h3>
+      <p>{description || "Upgrade to MetricHealth Pro to unlock this feature."}</p>
+      <button className="btn btn-gold" onClick={onUpgrade}>
+        Upgrade to Pro
+      </button>
+    </div>
+  );
+}
+
 // ── REMINDERS TAB ─────────────────────────────────────────────────────────────
-function RemindersTab({ data }) {
+function RemindersTab({ data, isPro, onUpgrade }) {
   const { config, setConfig, permission, requestPermission } = useReminders();
   const [testSent, setTestSent] = useState(false);
+
+  if (!isPro) {
+    return (
+      <ProGate
+        title="Push Reminders — Pro Feature"
+        description="Get daily morning and evening alerts to log your readings. Never miss a check-up again. Upgrade to Pro to enable reminders."
+        onUpgrade={onUpgrade}
+      />
+    );
+  }
 
   const updateSlot = (key, patch) =>
     setConfig({ ...config, [key]: { ...config[key], ...patch } });
@@ -1924,7 +2130,7 @@ function RemindersTab({ data }) {
   );
 }
 
-function BackupTab({ data, save, toast, isOnline, user, syncStatus }) {
+function BackupTab({ data, save, toast, isOnline, user, syncStatus, isPro, onUpgrade }) {
   const [authLoading, setAuthLoading] = useState(false);
   const [lastBackup, setLastBackup]   = useState(() => localStorage.getItem("htLastSync") || null);
   const [status, setStatus]           = useState(null);
@@ -2029,6 +2235,10 @@ service cloud.firestore {
       allow read, write: if request.auth != null
                          && request.auth.uid == userId;
     }
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
   }
 }`}</pre>
           <ol start={6}>
@@ -2044,22 +2254,30 @@ service cloud.firestore {
   if (!user) {
     return (
       <div>
-        <div className="card">
-          <div className="card-title"><span className="dot" />Cloud Backup</div>
-          <div className="backup-center">
-            <div className="backup-center-icon">☁</div>
-            <h3>Back up your health data</h3>
-            <p>
-              Sign in with your Google account to save your records securely to the cloud.
-              If you ever lose or change your device, you can restore everything instantly.
-            </p>
-            <button className="btn-google" onClick={handleSignIn} disabled={authLoading}>
-              {GOOGLE_SVG}
-              {authLoading ? "Connecting…" : "Sign in with Google"}
-            </button>
-            {status && <div className={`msg-bar ${status.type}`} style={{ marginTop: 16, justifyContent: "center" }}>{status.msg}</div>}
+        {!isPro ? (
+          <ProGate
+            title="Cloud Backup — Pro Feature"
+            description="Back up your records to the cloud, sync across devices in real-time, and restore on any phone. Upgrade to Pro to enable cloud backup."
+            onUpgrade={onUpgrade}
+          />
+        ) : (
+          <div className="card">
+            <div className="card-title"><span className="dot" />Cloud Backup</div>
+            <div className="backup-center">
+              <div className="backup-center-icon">☁</div>
+              <h3>Back up your health data</h3>
+              <p>
+                Sign in with your Google account to save your records securely to the cloud.
+                If you ever lose or change your device, you can restore everything instantly.
+              </p>
+              <button className="btn-google" onClick={handleSignIn} disabled={authLoading}>
+                {GOOGLE_SVG}
+                {authLoading ? "Connecting…" : "Sign in with Google"}
+              </button>
+              {status && <div className={`msg-bar ${status.type}`} style={{ marginTop: 16, justifyContent: "center" }}>{status.msg}</div>}
+            </div>
           </div>
-        </div>
+        )}
         <PinCard toast={toast} />
       </div>
     );
@@ -2068,6 +2286,13 @@ service cloud.firestore {
   // Main backup UI
   return (
     <div>
+      {!isPro && (
+        <ProGate
+          title="Cloud Backup — Pro Feature"
+          description="You're signed in, but cloud backup requires Pro. Upgrade to sync your data across devices."
+          onUpgrade={onUpgrade}
+        />
+      )}
       <div className="card">
         <div className="card-title"><span className="dot" />Your Account</div>
         <div className="user-row">
@@ -2151,6 +2376,11 @@ export default function App() {
   // ── Auth state (shared with BackupTab) ────────────────────────────────────
   const [user, setUser]           = useState(null);
   const [syncStatus, setSyncStatus] = useState(null); // null|"syncing"|"synced"|"error"
+
+  // ── Pro status ────────────────────────────────────────────────────────────
+  const isPro = usePro(user);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const onUpgrade = () => setUpgradeOpen(true);
 
   // Refs for loop prevention
   const lastWriteRef         = useRef(localStorage.getItem("htLastSync") || "");
@@ -2241,6 +2471,10 @@ export default function App() {
             <button className="dark-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
               {darkMode ? "☀️" : "🌙"}
             </button>
+            {isPro
+              ? <span className="pro-badge">⭐ Pro</span>
+              : <button className="btn btn-gold btn-sm" onClick={onUpgrade} style={{ fontSize: 12, padding: "5px 14px" }}>⭐ Upgrade</button>
+            }
             {user && syncLabel && (
               <span style={{
                 fontFamily: "'DM Mono', monospace",
@@ -2276,14 +2510,22 @@ export default function App() {
         </div>
 
         {tab === "log"       && <LogCheckTab data={data} save={save} toast={toast} />}
-        {tab === "records"   && <RecordsTab data={data} save={save} toast={toast} />}
+        {tab === "records"   && <RecordsTab data={data} save={save} toast={toast} isPro={isPro} onUpgrade={onUpgrade} />}
         {tab === "charts"    && <ChartsTab data={data} />}
-        {tab === "persons"   && <PersonsTab data={data} save={save} toast={toast} />}
+        {tab === "persons"   && <PersonsTab data={data} save={save} toast={toast} isPro={isPro} onUpgrade={onUpgrade} />}
         {tab === "checks"    && <CheckTypesTab data={data} save={save} toast={toast} />}
-        {tab === "reminders" && <RemindersTab data={data} />}
-        {tab === "backup"    && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} user={user} syncStatus={syncStatus} />}
+        {tab === "reminders" && <RemindersTab data={data} isPro={isPro} onUpgrade={onUpgrade} />}
+        {tab === "backup"    && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} user={user} syncStatus={syncStatus} isPro={isPro} onUpgrade={onUpgrade} />}
       </div>
       {toastMsg && <Toast msg={toastMsg} onDone={() => setToastMsg("")} />}
+      {upgradeOpen && (
+        <UpgradeModal
+          user={user}
+          toast={toast}
+          onClose={() => setUpgradeOpen(false)}
+          onProActivated={() => { /* isPro updates automatically via usePro hook */ }}
+        />
+      )}
     </>
   );
 }

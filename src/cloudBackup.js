@@ -69,6 +69,39 @@ export function subscribeToCloud(uid, onData) {
   });
 }
 
+// ── PRO STATUS ────────────────────────────────────────────────────────────────
+const PRO_CACHE = "mh_pro_v1";
+
+/** Write pro status to Firestore + localStorage cache after a successful payment. */
+export async function setProStatus({ plan, ref }) {
+  const { auth, db } = getServices();
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not signed in");
+
+  const now = new Date();
+  const expiresAt = new Date(now);
+  if (plan === "monthly") expiresAt.setMonth(expiresAt.getMonth() + 1);
+  else expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+  const data = { pro: true, plan, ref, paidAt: now.toISOString(), expiresAt: expiresAt.toISOString() };
+  await setDoc(doc(db, "users", user.uid), data, { merge: true });
+  localStorage.setItem(PRO_CACHE, JSON.stringify(data));
+  return data;
+}
+
+/** Subscribe to pro status from Firestore. Calls onData(true|false) on change. */
+export function subscribeProStatus(uid, onData) {
+  if (!IS_CONFIGURED) { onData(false); return () => {}; }
+  const { db } = getServices();
+  return onSnapshot(doc(db, "users", uid), (snap) => {
+    if (!snap.exists()) { onData(false); return; }
+    const d = snap.data();
+    if (!d.pro || (d.expiresAt && new Date(d.expiresAt) < new Date())) { onData(false); return; }
+    localStorage.setItem(PRO_CACHE, JSON.stringify(d));
+    onData(true);
+  }, () => onData(false));
+}
+
 export async function restoreFromCloud() {
   const { auth, db } = getServices();
   const user = auth.currentUser;
