@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { IS_CONFIGURED } from "./firebaseConfig.js";
 import {
   listenAuthState, signInWithGoogle, signOut,
@@ -208,6 +209,21 @@ const STYLES = `
   .setup-guide ol { padding-left: 20px; font-size: 13px; line-height: 2.1; color: var(--ink); }
   .setup-guide code { font-family: 'DM Mono', monospace; background: rgba(0,0,0,0.08); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
   .setup-guide a { color: var(--teal-dark); }
+
+  /* CHARTS TAB */
+  .charts-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 24px; }
+  .charts-filters .form-group { min-width: 160px; flex: 1; }
+  .chart-card { background: var(--white); border: 1px solid var(--border); border-radius: 16px; padding: 20px 20px 12px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .chart-card-title { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 4px; color: var(--ink); }
+  .chart-card-meta { font-size: 12px; color: var(--slate); font-family: 'DM Mono', monospace; margin-bottom: 16px; }
+  .chart-legend { display: flex; gap: 16px; margin-top: 8px; justify-content: center; flex-wrap: wrap; }
+  .chart-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-family: 'DM Mono', monospace; color: var(--slate); }
+  .chart-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chart-empty { text-align: center; padding: 48px 24px; color: var(--slate); }
+  .chart-empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .range-pill { display: flex; gap: 4px; background: var(--slate-light); border-radius: 10px; padding: 4px; }
+  .range-btn { padding: 6px 14px; border: none; background: transparent; border-radius: 7px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--slate); cursor: pointer; transition: all 0.15s; font-weight: 600; }
+  .range-btn.active { background: var(--ink); color: #fff; }
 
   /* ── MOBILE ───────────────────────────────────────────────────────────────── */
   @media (max-width: 520px) {
@@ -698,6 +714,190 @@ function RecordsTab({ data, save, toast }) {
   );
 }
 
+// ── CHARTS TAB ────────────────────────────────────────────────────────────────
+const RANGES = [
+  { label: "7d",  days: 7  },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
+  { label: "All", days: 0  },
+];
+
+function formatXDate(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+
+function CustomTooltip({ active, payload, label, unit }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: "#1a1a2e", color: "#fff", padding: "10px 14px", borderRadius: 10, fontSize: 13, fontFamily: "'DM Mono', monospace", boxShadow: "0 4px 16px rgba(0,0,0,0.2)" }}>
+      <div style={{ marginBottom: 6, opacity: 0.7 }}>{formatXDate(label)}</div>
+      {payload.map(p => (
+        <div key={p.dataKey} style={{ color: p.color, display: "flex", gap: 8, alignItems: "center" }}>
+          <span>{p.name}:</span>
+          <strong>{p.value}{unit ? ` ${unit}` : ""}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChartsTab({ data }) {
+  const [personId, setPersonId] = useState(data.persons[0]?.id || "");
+  const [rangeDays, setRangeDays] = useState(30);
+
+  const getCheck = (id) => data.checkTypes.find(c => c.id === id);
+
+  // Cutoff date string
+  const cutoff = rangeDays === 0
+    ? null
+    : new Date(Date.now() - rangeDays * 86_400_000).toISOString().slice(0, 10);
+
+  // Records for selected person within range, sorted by date
+  const personRecords = data.records
+    .filter(r => r.personId === personId && (!cutoff || r.date >= cutoff))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Group records by checkTypeId → build chart data points
+  const charts = data.checkTypes
+    .map(ct => {
+      const ctRecords = personRecords.filter(r => r.checkTypeId === ct.id);
+      if (!ctRecords.length) return null;
+
+      // Merge morning + evening per date into one point
+      const byDate = {};
+      ctRecords.forEach(r => {
+        const v = parseFloat(r.value);
+        if (isNaN(v)) return;
+        if (!byDate[r.date]) byDate[r.date] = { date: r.date };
+        byDate[r.date][r.session === "Morning" ? "morning" : "evening"] = v;
+      });
+
+      const points = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+      const hasMorning = points.some(p => p.morning != null);
+      const hasEvening = points.some(p => p.evening != null);
+
+      return { ct, points, hasMorning, hasEvening };
+    })
+    .filter(Boolean);
+
+  const person = data.persons.find(p => p.id === personId);
+
+  return (
+    <div>
+      {/* Controls */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="charts-filters">
+          <div className="form-group">
+            <label>Person</label>
+            <select value={personId} onChange={e => setPersonId(e.target.value)}>
+              {data.persons.length === 0
+                ? <option value="">No persons added</option>
+                : data.persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)
+              }
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Time Range</label>
+            <div className="range-pill">
+              {RANGES.map(r => (
+                <button
+                  key={r.days}
+                  className={`range-btn ${rangeDays === r.days ? "active" : ""}`}
+                  onClick={() => setRangeDays(r.days)}
+                >{r.label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* No data state */}
+      {data.persons.length === 0 ? (
+        <div className="chart-empty"><div className="chart-empty-icon">👤</div><p>Add a person first to see charts.</p></div>
+      ) : charts.length === 0 ? (
+        <div className="chart-empty">
+          <div className="chart-empty-icon">📈</div>
+          <p>No records for <strong>{person?.name}</strong> in this time range.<br />Log some checks to see trends.</p>
+        </div>
+      ) : (
+        charts.map(({ ct, points, hasMorning, hasEvening }) => (
+          <div key={ct.id} className="chart-card">
+            <div className="chart-card-title">{ct.name}</div>
+            <div className="chart-card-meta">
+              {points.length} reading{points.length !== 1 ? "s" : ""}
+              {ct.unit ? ` · ${ct.unit}` : ""}
+              {points.length >= 2 && (() => {
+                const all = points.flatMap(p => [p.morning, p.evening].filter(v => v != null));
+                const min = Math.min(...all).toFixed(1);
+                const max = Math.max(...all).toFixed(1);
+                const avg = (all.reduce((s, v) => s + v, 0) / all.length).toFixed(1);
+                return ` · min ${min} · max ${max} · avg ${avg}`;
+              })()}
+            </div>
+
+            {points.length < 2 ? (
+              <p style={{ fontSize: 13, color: "var(--slate)", padding: "8px 0" }}>
+                Need at least 2 readings to show a trend line.
+              </p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={points} margin={{ top: 4, right: 8, bottom: 4, left: -10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={formatXDate}
+                      tick={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fill: "#64748b" }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fill: "#64748b" }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={45}
+                    />
+                    <Tooltip content={<CustomTooltip unit={ct.unit} />} />
+                    {hasMorning && (
+                      <Line
+                        type="monotone"
+                        dataKey="morning"
+                        name="Morning"
+                        stroke="#d97706"
+                        strokeWidth={2.5}
+                        dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}
+                        activeDot={{ r: 6 }}
+                        connectNulls
+                      />
+                    )}
+                    {hasEvening && (
+                      <Line
+                        type="monotone"
+                        dataKey="evening"
+                        name="Evening"
+                        stroke="#7c3aed"
+                        strokeWidth={2.5}
+                        dot={{ r: 4, fill: "#7c3aed", strokeWidth: 0 }}
+                        activeDot={{ r: 6 }}
+                        connectNulls
+                      />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="chart-legend">
+                  {hasMorning && <div className="chart-legend-item"><div className="chart-legend-dot" style={{ background: "#d97706" }} />Morning</div>}
+                  {hasEvening && <div className="chart-legend-item"><div className="chart-legend-dot" style={{ background: "#7c3aed" }} />Evening</div>}
+                </div>
+              </>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function timeAgo(isoString) {
   if (!isoString) return null;
@@ -958,11 +1158,12 @@ export default function App() {
   const toast = (msg) => setToastMsg(msg);
 
   const TABS = [
-    { id: "log", label: "📝 Log Check" },
+    { id: "log",     label: "📝 Log Check" },
     { id: "records", label: "📊 Records" },
+    { id: "charts",  label: "📈 Charts" },
     { id: "persons", label: "👤 Persons" },
-    { id: "checks", label: "🩺 Check Types" },
-    { id: "backup", label: "☁ Backup" },
+    { id: "checks",  label: "🩺 Check Types" },
+    { id: "backup",  label: "☁ Backup" },
   ];
 
   return (
@@ -993,11 +1194,12 @@ export default function App() {
           ))}
         </div>
 
-        {tab === "log" && <LogCheckTab data={data} save={save} toast={toast} />}
+        {tab === "log"     && <LogCheckTab data={data} save={save} toast={toast} />}
         {tab === "records" && <RecordsTab data={data} save={save} toast={toast} />}
+        {tab === "charts"  && <ChartsTab data={data} />}
         {tab === "persons" && <PersonsTab data={data} save={save} toast={toast} />}
-        {tab === "checks" && <CheckTypesTab data={data} save={save} toast={toast} />}
-        {tab === "backup" && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} />}
+        {tab === "checks"  && <CheckTypesTab data={data} save={save} toast={toast} />}
+        {tab === "backup"  && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} />}
       </div>
       {toastMsg && <Toast msg={toastMsg} onDone={() => setToastMsg("")} />}
     </>
