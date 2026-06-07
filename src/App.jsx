@@ -1,0 +1,928 @@
+import { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
+import { IS_CONFIGURED } from "./firebaseConfig.js";
+import {
+  listenAuthState, signInWithGoogle, signOut,
+  backupToCloud, restoreFromCloud,
+} from "./cloudBackup.js";
+
+const STORAGE_KEY = "healthtracker_v1";
+
+const DEFAULT_CHECK_TYPES = [
+  { id: "bp", name: "Blood Pressure", unit: "mmHg" },
+  { id: "temp", name: "Temperature", unit: "°C" },
+  { id: "weight", name: "Weight", unit: "kg" },
+  { id: "sugar", name: "Blood Sugar", unit: "mg/dL" },
+];
+
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cream: #f5f0e8;
+    --ink: #1a1a2e;
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --teal-dark: #0f766e;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+    --rose: #e11d48;
+    --rose-light: #ffe4e6;
+    --slate: #64748b;
+    --slate-light: #f1f5f9;
+    --white: #ffffff;
+    --border: #e2e8f0;
+    --shadow: 0 4px 24px rgba(26,26,46,0.08);
+    --shadow-lg: 0 8px 40px rgba(26,26,46,0.14);
+  }
+
+  body { font-family: 'Syne', sans-serif; background: var(--cream); color: var(--ink); min-height: 100vh; }
+
+  .app { max-width: 1100px; margin: 0 auto; padding: 0 16px 60px; }
+
+  /* HEADER */
+  .header {
+    padding: 32px 0 24px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 32px;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .header-title { font-family: 'DM Serif Display', serif; font-size: clamp(28px, 5vw, 44px); line-height: 1; color: var(--ink); }
+  .header-title span { color: var(--teal); font-style: italic; }
+  .header-sub { font-size: 13px; color: var(--slate); margin-top: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-family: 'DM Mono', monospace; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; background: var(--ink); border-radius: 12px; padding: 4px; margin-bottom: 28px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 1; min-width: max-content; padding: 10px 12px; border: none; background: transparent; color: rgba(255,255,255,0.55); font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; letter-spacing: 0.03em; white-space: nowrap; }
+  .tab.active { background: var(--teal); color: #fff; }
+  .tab:hover:not(.active) { color: #fff; }
+
+  /* CARDS */
+  .card { background: var(--white); border-radius: 16px; padding: 24px; box-shadow: var(--shadow); margin-bottom: 20px; border: 1px solid var(--border); }
+  .card-title { font-family: 'DM Serif Display', serif; font-size: 20px; margin-bottom: 18px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .card-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); display: inline-block; }
+
+  /* FORM ELEMENTS */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--slate); font-family: 'DM Mono', monospace; }
+  input, select, textarea {
+    padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 10px;
+    font-family: 'Syne', sans-serif; font-size: 14px; color: var(--ink);
+    background: var(--slate-light); outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-light); background: #fff; }
+
+  /* BUTTONS */
+  .btn { padding: 10px 20px; border: none; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.18s; display: inline-flex; align-items: center; gap: 7px; letter-spacing: 0.02em; }
+  .btn-primary { background: var(--teal); color: #fff; }
+  .btn-primary:hover { background: var(--teal-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(13,148,136,0.35); }
+  .btn-secondary { background: var(--ink); color: #fff; }
+  .btn-secondary:hover { background: #2d2d4e; transform: translateY(-1px); }
+  .btn-danger { background: var(--rose-light); color: var(--rose); border: 1px solid #fecdd3; }
+  .btn-danger:hover { background: var(--rose); color: #fff; }
+  .btn-amber { background: var(--amber-light); color: var(--amber); border: 1px solid #fde68a; }
+  .btn-amber:hover { background: var(--amber); color: #fff; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-full { width: 100%; justify-content: center; margin-top: 8px; }
+
+  /* PERSON CARDS */
+  .person-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .person-card {
+    background: var(--white); border: 2px solid var(--border); border-radius: 14px; padding: 18px;
+    cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden;
+  }
+  .person-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--teal); transform: scaleX(0); transform-origin: left; transition: transform 0.2s; }
+  .person-card:hover::before, .person-card.selected::before { transform: scaleX(1); }
+  .person-card:hover { border-color: var(--teal); box-shadow: var(--shadow); }
+  .person-card.selected { border-color: var(--teal); background: #f0fdfa; }
+  .person-name { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 4px; }
+  .person-meta { font-size: 12px; color: var(--slate); font-family: 'DM Mono', monospace; }
+  .person-actions { display: flex; gap: 6px; margin-top: 12px; }
+
+  /* RECORDS TABLE */
+  .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead { background: var(--ink); color: #fff; }
+  th { padding: 12px 16px; text-align: left; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.07em; font-weight: 500; }
+  td { padding: 11px 16px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--slate-light); }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; font-family: 'DM Mono', monospace; }
+  .badge-morning { background: var(--amber-light); color: var(--amber); }
+  .badge-evening { background: #ede9fe; color: #7c3aed; }
+
+  /* EMPTY STATE */
+  .empty { text-align: center; padding: 48px 24px; color: var(--slate); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; line-height: 1.6; }
+
+  /* CHECK TYPE LIST */
+  .check-list { display: flex; flex-direction: column; gap: 10px; }
+  .check-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--slate-light); border-radius: 10px; border: 1px solid var(--border); }
+  .check-item-name { font-weight: 700; font-size: 14px; }
+  .check-item-unit { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--slate); }
+
+  /* SUMMARY STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat-box { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .stat-value { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--teal); }
+  .stat-label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.06em; font-family: 'DM Mono', monospace; margin-top: 4px; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 999; box-shadow: var(--shadow-lg); animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* OFFLINE BANNER */
+  .offline-banner { background: #451a03; color: #fef3c7; padding: 8px 16px; text-align: center; font-size: 13px; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; border-radius: 10px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .online-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-family: 'DM Mono', monospace; padding: 4px 10px; border-radius: 20px; border: 1.5px solid; }
+  .online-badge.online { color: var(--teal-dark); border-color: var(--teal); background: var(--teal-light); }
+  .online-badge.offline { color: #92400e; border-color: #d97706; background: #fef3c7; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .online-badge.online .status-dot { background: var(--teal); }
+  .online-badge.offline .status-dot { background: #d97706; }
+
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+  .flex-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .ml-auto { margin-left: auto; }
+  .text-sm { font-size: 13px; }
+  .text-slate { color: var(--slate); }
+  .mt-4 { margin-top: 16px; }
+  .fw-bold { font-weight: 700; }
+
+  /* BACKUP TAB */
+  .backup-center { text-align: center; padding: 40px 24px; }
+  .backup-center-icon { font-size: 52px; margin-bottom: 16px; }
+  .backup-center h3 { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 8px; }
+  .backup-center p { font-size: 14px; color: var(--slate); max-width: 380px; margin: 0 auto 24px; line-height: 1.6; }
+
+  .btn-google { background: #fff; color: #3c4043; border: 1.5px solid var(--border); display: inline-flex; align-items: center; gap: 10px; padding: 10px 24px; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.18s; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .btn-google:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.15); transform: translateY(-1px); }
+  .btn-google:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .user-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--slate-light); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; }
+  .user-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+  .user-avatar-placeholder { width: 38px; height: 38px; border-radius: 50%; background: var(--teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .user-name { font-weight: 700; font-size: 14px; line-height: 1.3; }
+  .user-email { font-size: 12px; color: var(--slate); font-family: 'DM Mono', monospace; }
+
+  .backup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .backup-action-card { border: 1.5px solid var(--border); border-radius: 14px; padding: 22px 20px; }
+  .backup-action-card h4 { font-family: 'DM Serif Display', serif; font-size: 17px; margin-bottom: 6px; }
+  .backup-action-card p { font-size: 12px; color: var(--slate); margin-bottom: 16px; line-height: 1.55; }
+
+  .last-backup-row { display: flex; align-items: center; gap: 8px; font-size: 12px; font-family: 'DM Mono', monospace; color: var(--slate); margin-bottom: 20px; }
+  .last-backup-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
+  .last-backup-dot.never { background: var(--border); }
+
+  .auto-backup-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; background: var(--slate-light); border-radius: 12px; border: 1px solid var(--border); }
+  .auto-backup-text .label { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+  .auto-backup-text .sub { font-size: 12px; color: var(--slate); line-height: 1.4; }
+  .toggle { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 26px; transition: background 0.2s; }
+  .toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .toggle input:checked + .toggle-slider { background: var(--teal); }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+  .msg-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px; font-size: 13px; font-family: 'DM Mono', monospace; margin-top: 12px; }
+  .msg-bar.success { background: var(--teal-light); color: var(--teal-dark); }
+  .msg-bar.error { background: var(--rose-light); color: var(--rose); }
+  .msg-bar.info { background: var(--amber-light); color: var(--amber); }
+
+  .setup-guide { background: var(--amber-light); border: 1.5px solid #fde68a; border-radius: 14px; padding: 22px 20px; }
+  .setup-guide h4 { font-family: 'DM Serif Display', serif; font-size: 17px; margin-bottom: 12px; color: #92400e; }
+  .setup-guide ol { padding-left: 20px; font-size: 13px; line-height: 2.1; color: var(--ink); }
+  .setup-guide code { font-family: 'DM Mono', monospace; background: rgba(0,0,0,0.08); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .setup-guide a { color: var(--teal-dark); }
+
+  /* ── MOBILE ───────────────────────────────────────────────────────────────── */
+  @media (max-width: 520px) {
+    .app { padding: 0 12px 48px; }
+
+    /* Header: stack badge below title on small screens */
+    .header { padding: 20px 0 16px; margin-bottom: 20px; flex-direction: column; align-items: flex-start; gap: 10px; }
+    .header-title { font-size: clamp(24px, 8vw, 36px); }
+    .online-badge { font-size: 11px; padding: 3px 9px; }
+
+    /* Offline banner */
+    .offline-banner { font-size: 12px; padding: 8px 12px; border-radius: 8px; }
+
+    /* Tabs: already scrollable, just tighten padding */
+    .tabs { margin-bottom: 20px; border-radius: 10px; }
+    .tab { font-size: 12px; padding: 9px 10px; }
+
+    /* Cards */
+    .card { padding: 16px; border-radius: 12px; }
+    .card-title { font-size: 17px; margin-bottom: 14px; }
+
+    /* Form grids: single column on mobile */
+    .form-grid { grid-template-columns: 1fr; gap: 12px; }
+
+    /* Person cards: single column */
+    .person-grid { grid-template-columns: 1fr; }
+    .person-card { padding: 14px; }
+
+    /* Stats row: 2-column grid */
+    .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+    .stat-value { font-size: 24px; }
+
+    /* Records table: contain inside card, no horizontal bleed */
+    .table-wrap { border-radius: 8px; }
+    table { font-size: 12px; }
+    th { padding: 10px 10px; font-size: 10px; }
+    td { padding: 9px 10px; }
+
+    /* Check list */
+    .check-item { padding: 10px 12px; }
+
+    /* Buttons */
+    .btn { font-size: 13px; padding: 9px 16px; }
+    .btn-sm { font-size: 11px; padding: 5px 10px; }
+
+    /* Backup tab */
+    .backup-grid { grid-template-columns: 1fr; }
+    .backup-action-card { padding: 16px; }
+    .backup-center { padding: 28px 16px; }
+    .user-row { flex-wrap: wrap; gap: 10px; }
+    .auto-backup-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .setup-guide ol { line-height: 1.9; }
+    .last-backup-row { flex-wrap: wrap; }
+
+    /* Prevent any direct children of cards from bleeding */
+    .card > * { max-width: 100%; }
+    pre { overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  }
+`;
+
+function useOnlineStatus() {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+  return online;
+}
+
+function generateId() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function useStorage() {
+  const [data, setData] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return { persons: [], checkTypes: DEFAULT_CHECK_TYPES, records: [] };
+  });
+
+  const save = (next) => {
+    setData(next);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  };
+  return [data, save];
+}
+
+function Toast({ msg, onDone }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 2500);
+    return () => clearTimeout(t);
+  }, []);
+  return <div className="toast">✓ {msg}</div>;
+}
+
+// ── PERSONS TAB ───────────────────────────────────────────────────────────────
+function PersonsTab({ data, save, toast }) {
+  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const add = () => {
+    if (!name.trim()) return;
+    save({ ...data, persons: [...data.persons, { id: generateId(), name: name.trim(), age, notes }] });
+    setName(""); setAge(""); setNotes("");
+    toast("Person added");
+  };
+
+  const remove = (id) => {
+    if (!confirm("Delete this person and ALL their records?")) return;
+    save({ ...data, persons: data.persons.filter(p => p.id !== id), records: data.records.filter(r => r.personId !== id) });
+    toast("Person removed");
+  };
+
+  return (
+    <div>
+      <div className="card">
+        <div className="card-title"><span className="dot" />Add New Person</div>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Full Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Amaka Johnson" />
+          </div>
+          <div className="form-group">
+            <label>Age</label>
+            <input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="e.g. 34" />
+          </div>
+          <div className="form-group">
+            <label>Notes</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note" />
+          </div>
+        </div>
+        <button className="btn btn-primary btn-full mt-4" onClick={add}>+ Add Person</button>
+      </div>
+
+      <div className="card">
+        <div className="card-title"><span className="dot" />All Persons ({data.persons.length})</div>
+        {data.persons.length === 0 ? (
+          <div className="empty"><div className="empty-icon">👤</div><p>No persons added yet.<br />Add someone above to get started.</p></div>
+        ) : (
+          <div className="person-grid">
+            {data.persons.map(p => (
+              <div key={p.id} className="person-card">
+                <div className="person-name">{p.name}</div>
+                <div className="person-meta">{p.age ? `Age: ${p.age}` : "Age not set"}{p.notes ? ` · ${p.notes}` : ""}</div>
+                <div className="person-meta" style={{ marginTop: 4 }}>
+                  {data.records.filter(r => r.personId === p.id).length} records
+                </div>
+                <div className="person-actions">
+                  <button className="btn btn-danger btn-sm" onClick={() => remove(p.id)}>Remove</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── CHECK TYPES TAB ───────────────────────────────────────────────────────────
+function CheckTypesTab({ data, save, toast }) {
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("");
+
+  const add = () => {
+    if (!name.trim()) return;
+    save({ ...data, checkTypes: [...data.checkTypes, { id: generateId(), name: name.trim(), unit: unit.trim() }] });
+    setName(""); setUnit("");
+    toast("Check type added");
+  };
+
+  const remove = (id) => {
+    save({ ...data, checkTypes: data.checkTypes.filter(c => c.id !== id) });
+    toast("Check type removed");
+  };
+
+  return (
+    <div>
+      <div className="card">
+        <div className="card-title"><span className="dot" />Add Check Type</div>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Check Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Pulse Rate" />
+          </div>
+          <div className="form-group">
+            <label>Unit</label>
+            <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="e.g. bpm" />
+          </div>
+        </div>
+        <button className="btn btn-primary btn-full mt-4" onClick={add}>+ Add Check Type</button>
+      </div>
+
+      <div className="card">
+        <div className="card-title"><span className="dot" />All Check Types ({data.checkTypes.length})</div>
+        <div className="check-list">
+          {data.checkTypes.map(c => (
+            <div key={c.id} className="check-item">
+              <div>
+                <div className="check-item-name">{c.name}</div>
+                {c.unit && <div className="check-item-unit">Unit: {c.unit}</div>}
+              </div>
+              <button className="btn btn-danger btn-sm" onClick={() => remove(c.id)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── LOG CHECK TAB ─────────────────────────────────────────────────────────────
+function LogCheckTab({ data, save, toast }) {
+  const [personId, setPersonId] = useState("");
+  const [checkTypeId, setCheckTypeId] = useState("");
+  const [value, setValue] = useState("");
+  const [session, setSession] = useState("Morning");
+  const [date, setDate] = useState(today());
+  const [notes, setNotes] = useState("");
+
+  const selectedCheck = data.checkTypes.find(c => c.id === checkTypeId);
+
+  const log = () => {
+    if (!personId || !checkTypeId || !value.trim() || !date) return alert("Please fill all required fields.");
+    const record = { id: generateId(), personId, checkTypeId, value: value.trim(), session, date, notes: notes.trim(), createdAt: new Date().toISOString() };
+    save({ ...data, records: [...data.records, record] });
+    setValue(""); setNotes("");
+    toast("Check recorded successfully");
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title"><span className="dot" />Log a Health Check</div>
+      <div className="form-grid">
+        <div className="form-group">
+          <label>Person *</label>
+          <select value={personId} onChange={e => setPersonId(e.target.value)}>
+            <option value="">— Select person —</option>
+            {data.persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Check Type *</label>
+          <select value={checkTypeId} onChange={e => setCheckTypeId(e.target.value)}>
+            <option value="">— Select check —</option>
+            {data.checkTypes.map(c => <option key={c.id} value={c.id}>{c.name}{c.unit ? ` (${c.unit})` : ""}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Value * {selectedCheck?.unit ? `(${selectedCheck.unit})` : ""}</label>
+          <input value={value} onChange={e => setValue(e.target.value)} placeholder="Enter reading" />
+        </div>
+        <div className="form-group">
+          <label>Session *</label>
+          <select value={session} onChange={e => setSession(e.target.value)}>
+            <option>Morning</option>
+            <option>Evening</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Date *</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label>Notes</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+        </div>
+      </div>
+      <button className="btn btn-primary btn-full mt-4" onClick={log}>✓ Record Check</button>
+    </div>
+  );
+}
+
+// ── RECORDS TAB ───────────────────────────────────────────────────────────────
+function RecordsTab({ data, save, toast }) {
+  const [filterPerson, setFilterPerson] = useState("");
+  const [filterCheck, setFilterCheck] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+
+  const getName = (id) => data.persons.find(p => p.id === id)?.name || "Unknown";
+  const getCheck = (id) => data.checkTypes.find(c => c.id === id);
+
+  const filtered = data.records.filter(r => {
+    if (filterPerson && r.personId !== filterPerson) return false;
+    if (filterCheck && r.checkTypeId !== filterCheck) return false;
+    if (filterFrom && r.date < filterFrom) return false;
+    if (filterTo && r.date > filterTo) return false;
+    return true;
+  }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+
+  const deleteRecord = (id) => {
+    save({ ...data, records: data.records.filter(r => r.id !== id) });
+    toast("Record deleted");
+  };
+
+  const downloadReport = (personId) => {
+    const person = data.persons.find(p => p.id === personId);
+    if (!person) return;
+    const personRecords = data.records.filter(r => r.personId === personId).sort((a, b) => a.date.localeCompare(b.date));
+
+    const wb = XLSX.utils.book_new();
+
+    // Summary sheet
+    const summaryRows = [["Health Check Report"], [`Person: ${person.name}`], [`Age: ${person.age || "N/A"}`], [`Notes: ${person.notes || "N/A"}`], [`Generated: ${new Date().toLocaleString()}`], [], ["Date", "Check Type", "Value", "Unit", "Session", "Notes"]];
+    personRecords.forEach(r => {
+      const ct = getCheck(r.checkTypeId);
+      summaryRows.push([r.date, ct?.name || "Unknown", r.value, ct?.unit || "", r.session, r.notes]);
+    });
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+    summarySheet["!cols"] = [{ wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, summarySheet, "All Records");
+
+    // Per check type sheets
+    data.checkTypes.forEach(ct => {
+      const ctRecords = personRecords.filter(r => r.checkTypeId === ct.id);
+      if (ctRecords.length === 0) return;
+      const rows = [["Date", "Session", `Value (${ct.unit || "—"})`, "Notes"]];
+      ctRecords.forEach(r => rows.push([r.date, r.session, r.value, r.notes]));
+      const sheet = XLSX.utils.aoa_to_sheet(rows);
+      sheet["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 24 }];
+      XLSX.utils.book_append_sheet(wb, sheet, ct.name.slice(0, 31));
+    });
+
+    XLSX.writeFile(wb, `${person.name.replace(/\s+/g, "_")}_HealthReport.xlsx`);
+    toast(`Report downloaded for ${person.name}`);
+  };
+
+  const totalPersons = data.persons.length;
+  const totalRecords = data.records.length;
+  const todayRecords = data.records.filter(r => r.date === today()).length;
+
+  return (
+    <div>
+      <div className="stats-row">
+        <div className="stat-box"><div className="stat-value">{totalPersons}</div><div className="stat-label">Persons</div></div>
+        <div className="stat-box"><div className="stat-value">{totalRecords}</div><div className="stat-label">Total Records</div></div>
+        <div className="stat-box"><div className="stat-value">{todayRecords}</div><div className="stat-label">Today's Checks</div></div>
+        <div className="stat-box"><div className="stat-value">{data.checkTypes.length}</div><div className="stat-label">Check Types</div></div>
+      </div>
+
+      {/* Download by person */}
+      <div className="card">
+        <div className="card-title"><span className="dot" />Download Individual Reports</div>
+        {data.persons.length === 0 ? (
+          <p className="text-sm text-slate">No persons yet.</p>
+        ) : (
+          <div className="person-grid">
+            {data.persons.map(p => (
+              <div key={p.id} className="person-card">
+                <div className="person-name">{p.name}</div>
+                <div className="person-meta">{data.records.filter(r => r.personId === p.id).length} records</div>
+                <div className="person-actions">
+                  <button className="btn btn-amber btn-sm" onClick={() => downloadReport(p.id)}>⬇ Excel Report</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Filter + table */}
+      <div className="card">
+        <div className="card-title"><span className="dot" />Records</div>
+        <div className="form-grid" style={{ marginBottom: 16 }}>
+          <div className="form-group">
+            <label>Person</label>
+            <select value={filterPerson} onChange={e => setFilterPerson(e.target.value)}>
+              <option value="">All persons</option>
+              {data.persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Check Type</label>
+            <select value={filterCheck} onChange={e => setFilterCheck(e.target.value)}>
+              <option value="">All checks</option>
+              {data.checkTypes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>From</label>
+            <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>To</label>
+            <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} />
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="empty"><div className="empty-icon">📋</div><p>No records found.<br />Log some checks to see them here.</p></div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Person</th><th>Check</th><th>Value</th><th>Session</th><th>Notes</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(r => {
+                  const ct = getCheck(r.checkTypeId);
+                  return (
+                    <tr key={r.id}>
+                      <td style={{ fontFamily: "'DM Mono', monospace", fontSize: 13 }}>{r.date}</td>
+                      <td className="fw-bold">{getName(r.personId)}</td>
+                      <td>{ct?.name || "—"}</td>
+                      <td style={{ fontFamily: "'DM Mono', monospace" }}>{r.value} {ct?.unit}</td>
+                      <td><span className={`badge badge-${r.session.toLowerCase()}`}>{r.session}</span></td>
+                      <td className="text-slate text-sm">{r.notes || "—"}</td>
+                      <td><button className="btn btn-danger btn-sm" onClick={() => deleteRecord(r.id)}>✕</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function timeAgo(isoString) {
+  if (!isoString) return null;
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+// ── BACKUP TAB ────────────────────────────────────────────────────────────────
+const GOOGLE_SVG = (
+  <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+
+function BackupTab({ data, save, toast, isOnline }) {
+  const [user, setUser]               = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [lastBackup, setLastBackup]   = useState(() => localStorage.getItem("htLastBackup") || null);
+  const [autoBackup, setAutoBackup]   = useState(() => localStorage.getItem("htAutoBackup") === "true");
+  const [status, setStatus]           = useState(null);
+  const [opLoading, setOpLoading]     = useState(null);
+  const autoRef = useRef(autoBackup);
+  autoRef.current = autoBackup;
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  // Firebase auth state persists across page reloads automatically
+  useEffect(() => {
+    if (!IS_CONFIGURED) return;
+    const unsub = listenAuthState(setUser);
+    return unsub;
+  }, []);
+
+  // Auto-backup when coming back online
+  useEffect(() => {
+    if (isOnline && autoRef.current && userRef.current) runBackup(true);
+  }, [isOnline]); // eslint-disable-line
+
+  // Auto-backup when data changes (debounced 20 s)
+  const timerRef = useRef(null);
+  useEffect(() => {
+    if (!autoRef.current || !userRef.current || !isOnline) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => runBackup(true), 20_000);
+    return () => clearTimeout(timerRef.current);
+  }, [data]); // eslint-disable-line
+
+  async function handleSignIn() {
+    setAuthLoading(true);
+    setStatus(null);
+    try {
+      await signInWithGoogle();
+      toast("Signed in with Google");
+    } catch {
+      setStatus({ type: "error", msg: "Sign-in was cancelled or failed. Please try again." });
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    setStatus(null);
+    toast("Signed out");
+  }
+
+  async function runBackup(silent = false) {
+    if (opLoading) return;
+    setOpLoading("backup");
+    if (!silent) setStatus(null);
+    try {
+      const ts = await backupToCloud(data);
+      setLastBackup(ts);
+      localStorage.setItem("htLastBackup", ts);
+      if (!silent) { setStatus({ type: "success", msg: "Backup saved successfully." }); toast("Backup complete"); }
+    } catch (e) {
+      if (!silent) setStatus({ type: "error", msg: "Backup failed: " + e.message });
+    } finally {
+      setOpLoading(null);
+    }
+  }
+
+  async function handleRestore() {
+    if (opLoading) return;
+    if (!confirm("This will replace ALL local data with your cloud backup. Continue?")) return;
+    setOpLoading("restore");
+    setStatus(null);
+    try {
+      const result = await restoreFromCloud();
+      if (!result) { setStatus({ type: "info", msg: "No backup found for your account yet." }); return; }
+      save(result.data);
+      const ts = result.modifiedTime;
+      setLastBackup(ts);
+      localStorage.setItem("htLastBackup", ts);
+      setStatus({ type: "success", msg: "Data restored from your backup." });
+      toast("Data restored successfully");
+    } catch (e) {
+      setStatus({ type: "error", msg: "Restore failed: " + e.message });
+    } finally {
+      setOpLoading(null);
+    }
+  }
+
+  function toggleAutoBackup(val) {
+    setAutoBackup(val);
+    localStorage.setItem("htAutoBackup", String(val));
+    autoRef.current = val;
+  }
+
+  const dataSize = (new Blob([JSON.stringify(data)]).size / 1024).toFixed(1);
+
+  // Developer setup guide — only visible until firebaseConfig.js is filled in
+  if (!IS_CONFIGURED) {
+    return (
+      <div className="card">
+        <div className="card-title"><span className="dot" />Cloud Backup</div>
+        <div className="setup-guide">
+          <h4>⚙ One-time setup (app owner only)</h4>
+          <p style={{ fontSize: 13, marginBottom: 12, color: "var(--ink)", lineHeight: 1.6 }}>
+            Complete these steps once. After that, your users just click "Sign in with Google" — they never touch any console.
+          </p>
+          <ol>
+            <li>Go to <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer">console.firebase.google.com</a> → <strong>Create a project</strong> (free)</li>
+            <li><strong>Add app</strong> → Web → copy the config object shown</li>
+            <li>Sidebar → <strong>Build → Authentication → Get started → Google → Enable → Save</strong></li>
+            <li>Sidebar → <strong>Build → Firestore Database → Create database</strong> → Production mode → Done</li>
+            <li>Firestore → <strong>Rules</strong> tab → paste the rules below → <strong>Publish</strong></li>
+          </ol>
+          <pre style={{ margin: "10px 0", background: "rgba(0,0,0,0.07)", padding: "10px 12px", borderRadius: 8, fontSize: 11, fontFamily: "'DM Mono', monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /backups/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+  }
+}`}</pre>
+          <ol start={6}>
+            <li>Open <code>src/firebaseConfig.js</code> and fill in the values from step 2</li>
+            <li>Restart the dev server — users now see "Sign in with Google" ✓</li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
+
+  // Sign-in screen for users who haven't signed in yet
+  if (!user) {
+    return (
+      <div className="card">
+        <div className="card-title"><span className="dot" />Cloud Backup</div>
+        <div className="backup-center">
+          <div className="backup-center-icon">☁</div>
+          <h3>Back up your health data</h3>
+          <p>
+            Sign in with your Google account to save your records securely to the cloud.
+            If you ever lose or change your device, you can restore everything instantly.
+          </p>
+          <button className="btn-google" onClick={handleSignIn} disabled={authLoading}>
+            {GOOGLE_SVG}
+            {authLoading ? "Connecting…" : "Sign in with Google"}
+          </button>
+          {status && <div className={`msg-bar ${status.type}`} style={{ marginTop: 16, justifyContent: "center" }}>{status.msg}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // Main backup UI
+  return (
+    <div>
+      <div className="card">
+        <div className="card-title"><span className="dot" />Your Account</div>
+        <div className="user-row">
+          {user.photoURL
+            ? <img className="user-avatar" src={user.photoURL} alt="" referrerPolicy="no-referrer" />
+            : <div className="user-avatar-placeholder">{(user.displayName || user.email || "?")[0].toUpperCase()}</div>
+          }
+          <div style={{ flex: 1 }}>
+            <div className="user-name">{user.displayName || "Google User"}</div>
+            <div className="user-email">{user.email}</div>
+          </div>
+          <button className="btn btn-danger btn-sm" onClick={handleSignOut}>Sign Out</button>
+        </div>
+
+        <div className="last-backup-row">
+          <span className={`last-backup-dot ${lastBackup ? "" : "never"}`} />
+          {lastBackup
+            ? <>Last backup: <strong>{timeAgo(lastBackup)}</strong> &nbsp;·&nbsp; {dataSize} KB · {data.persons.length} persons · {data.records.length} records</>
+            : "No backup yet — click Backup Now to save your data"}
+        </div>
+
+        <div className="auto-backup-row">
+          <div className="auto-backup-text">
+            <div className="label">Auto-backup when online</div>
+            <div className="sub">Backs up automatically whenever you reconnect or your data changes.</div>
+          </div>
+          <label className="toggle">
+            <input type="checkbox" checked={autoBackup} onChange={e => toggleAutoBackup(e.target.checked)} />
+            <span className="toggle-slider" />
+          </label>
+        </div>
+      </div>
+
+      <div className="backup-grid">
+        <div className="backup-action-card">
+          <h4>☁ Backup Now</h4>
+          <p>Save your current records to the cloud. Overwrites any previous backup.</p>
+          <button className="btn btn-primary btn-full" onClick={() => runBackup(false)} disabled={!!opLoading || !isOnline}>
+            {opLoading === "backup" ? "Saving…" : isOnline ? "Backup Now" : "No connection"}
+          </button>
+        </div>
+        <div className="backup-action-card">
+          <h4>↓ Restore</h4>
+          <p>Replace local data with your last cloud backup. Your current data will be overwritten.</p>
+          <button className="btn btn-secondary btn-full" onClick={handleRestore} disabled={!!opLoading || !isOnline}>
+            {opLoading === "restore" ? "Restoring…" : isOnline ? "Restore from Backup" : "No connection"}
+          </button>
+        </div>
+      </div>
+
+      {status && (
+        <div className={`msg-bar ${status.type}`}>
+          {status.type === "success" ? "✓" : status.type === "error" ? "✕" : "ℹ"} {status.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+export default function App() {
+  const [data, save] = useStorage();
+  const [tab, setTab] = useState("log");
+  const [toastMsg, setToastMsg] = useState("");
+  const isOnline = useOnlineStatus();
+
+  const toast = (msg) => setToastMsg(msg);
+
+  const TABS = [
+    { id: "log", label: "📝 Log Check" },
+    { id: "records", label: "📊 Records" },
+    { id: "persons", label: "👤 Persons" },
+    { id: "checks", label: "🩺 Check Types" },
+    { id: "backup", label: "☁ Backup" },
+  ];
+
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="app">
+        <div className="header">
+          <div>
+            <div className="header-title">Health <span>Tracker</span></div>
+            <div className="header-sub">Daily check-up records · {data.persons.length} persons · {data.records.length} records</div>
+          </div>
+          <span className={`online-badge ${isOnline ? 'online' : 'offline'}`}>
+            <span className="status-dot" />
+            {isOnline ? 'Online' : 'Offline'}
+          </span>
+        </div>
+        {!isOnline && (
+          <div className="offline-banner">
+            ⚡ You're offline — all records are saved locally and will stay available.
+          </div>
+        )}
+
+        <div className="tabs">
+          {TABS.map(t => (
+            <button key={t.id} className={`tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "log" && <LogCheckTab data={data} save={save} toast={toast} />}
+        {tab === "records" && <RecordsTab data={data} save={save} toast={toast} />}
+        {tab === "persons" && <PersonsTab data={data} save={save} toast={toast} />}
+        {tab === "checks" && <CheckTypesTab data={data} save={save} toast={toast} />}
+        {tab === "backup" && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} />}
+      </div>
+      {toastMsg && <Toast msg={toastMsg} onDone={() => setToastMsg("")} />}
+    </>
+  );
+}
