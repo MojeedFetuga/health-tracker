@@ -675,6 +675,10 @@ function RecordsTab({ data, save, toast }) {
   const [editing, setEditing] = useState(null); // record being edited
   const [ef, setEf] = useState({});             // edit form fields
 
+  // Import state
+  const [importPreview, setImportPreview] = useState(null); // { personName, records, fileName }
+  const fileInputRef = useRef(null);
+
   const getName  = (id) => data.persons.find(p => p.id === id)?.name || "Unknown";
   const getCheck = (id) => data.checkTypes.find(c => c.id === id);
 
@@ -701,6 +705,121 @@ function RecordsTab({ data, save, toast }) {
   const deleteRecord = (id) => {
     save({ ...data, records: data.records.filter(r => r.id !== id) });
     toast("Record deleted");
+  };
+
+  // ── Import from Excel ──────────────────────────────────────────────────────
+  const handleImportFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: "array" });
+        // Support both MetricHealth exports and plain spreadsheets
+        const sheetName = wb.SheetNames.includes("All Records") ? "All Records" : wb.SheetNames[0];
+        const sheet = wb.Sheets[sheetName];
+        if (!sheet) throw new Error("No sheet found in the file.");
+
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+        // Detect MetricHealth export: Row 0 = "MetricHealth Report"
+        const isMetricExport = String(rows[0]?.[0] || "").startsWith("MetricHealth");
+        let personName = null;
+        if (isMetricExport) {
+          const pRow = String(rows[1]?.[0] || "");
+          if (pRow.startsWith("Person: ")) personName = pRow.slice(8).trim();
+        }
+
+        // Find the header row (contains "Date" in the first cell)
+        const headerIdx = rows.findIndex(r => String(r[0]).trim().toLowerCase() === "date");
+        if (headerIdx === -1) throw new Error('No header row found. The first column must be labelled "Date".');
+
+        const headers = rows[headerIdx].map(h => String(h).trim().toLowerCase());
+        const col = (name) => headers.indexOf(name);
+
+        const iDate   = col("date");
+        const iCheck  = col("check type");
+        const iValue  = col("value");
+        const iUnit   = col("unit");
+        const iSess   = col("session");
+        const iNotes  = col("notes");
+        const iPerson = col("person"); // optional column for multi-person sheets
+
+        if (iDate === -1 || iCheck === -1 || iValue === -1)
+          throw new Error('Required columns missing. Expected: Date, Check Type, Value.');
+
+        const records = [];
+        for (let i = headerIdx + 1; i < rows.length; i++) {
+          const row = rows[i];
+          const date      = String(row[iDate]  || "").trim();
+          const checkName = String(row[iCheck] || "").trim();
+          const value     = String(row[iValue] || "").trim();
+          if (!date || !checkName || !value) continue;
+          records.push({
+            date,
+            checkTypeName: checkName,
+            unit:    iUnit  !== -1 ? String(row[iUnit]  || "").trim() : "",
+            value,
+            session: iSess  !== -1 ? String(row[iSess]  || "Morning").trim() : "Morning",
+            notes:   iNotes !== -1 ? String(row[iNotes] || "").trim() : "",
+            person:  iPerson !== -1 ? String(row[iPerson] || "").trim() : null,
+          });
+        }
+
+        if (records.length === 0) throw new Error("No data rows found in the file.");
+        setImportPreview({ personName, records, fileName: file.name });
+      } catch (err) {
+        alert("Import failed: " + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+
+  const confirmImport = () => {
+    if (!importPreview) return;
+    const { personName, records } = importPreview;
+
+    let nd = { ...data, persons: [...data.persons], checkTypes: [...data.checkTypes], records: [...data.records] };
+
+    const findOrCreatePerson = (name) => {
+      if (!name) return null;
+      let p = nd.persons.find(x => x.name.toLowerCase() === name.toLowerCase());
+      if (!p) { p = { id: generateId(), name, age: "", notes: "" }; nd.persons = [...nd.persons, p]; }
+      return p;
+    };
+
+    const findOrCreateCheckType = (name, unit) => {
+      let ct = nd.checkTypes.find(x => x.name.toLowerCase() === name.toLowerCase());
+      if (!ct) { ct = { id: generateId(), name, unit }; nd.checkTypes = [...nd.checkTypes, ct]; }
+      return ct;
+    };
+
+    let imported = 0, skipped = 0;
+    const newRecs = [...nd.records];
+
+    for (const r of records) {
+      const resolvedName = r.person || personName;
+      const person = findOrCreatePerson(resolvedName);
+      if (!person) { skipped++; continue; }
+      const ct = findOrCreateCheckType(r.checkTypeName, r.unit);
+
+      const isDupe = newRecs.some(x =>
+        x.personId === person.id &&
+        x.checkTypeId === ct.id &&
+        x.date === r.date &&
+        x.session === r.session &&
+        x.value === r.value
+      );
+      if (isDupe) { skipped++; continue; }
+
+      newRecs.push({ id: generateId(), personId: person.id, checkTypeId: ct.id, value: r.value, session: r.session, date: r.date, notes: r.notes, createdAt: new Date().toISOString() });
+      imported++;
+    }
+
+    save({ ...nd, records: newRecs });
+    toast(`Imported ${imported} record${imported !== 1 ? "s" : ""}${skipped ? ` · ${skipped} duplicate${skipped !== 1 ? "s" : ""} skipped` : ""}`);
+    setImportPreview(null);
   };
 
   const downloadReport = (personId) => {
@@ -784,6 +903,46 @@ function RecordsTab({ data, save, toast }) {
         <div className="stat-box"><div className="stat-value">{data.records.length}</div><div className="stat-label">Total Records</div></div>
         <div className="stat-box"><div className="stat-value">{data.records.filter(r => r.date === today()).length}</div><div className="stat-label">Today's Checks</div></div>
         <div className="stat-box"><div className="stat-value">{data.checkTypes.length}</div><div className="stat-label">Check Types</div></div>
+      </div>
+
+      {/* Import from Excel */}
+      <div className="card">
+        <div className="card-title"><span className="dot" />Import from Excel</div>
+
+        {!importPreview ? (
+          <>
+            <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 16, lineHeight: 1.6 }}>
+              Upload a MetricHealth Excel export (or any <code style={{ fontFamily:"'DM Mono',monospace", fontSize:11, background:"var(--slate-light)", padding:"1px 5px", borderRadius:4 }}>.xlsx</code> file with columns: <strong>Date, Check Type, Value, Unit, Session, Notes</strong>). Duplicates are skipped automatically.
+            </p>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={handleImportFile} />
+            <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
+              ⬆ Choose Excel file
+            </button>
+          </>
+        ) : (
+          <div>
+            <div style={{ background: "var(--teal-light)", border: "1.5px solid #99f6e4", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--teal-dark)" }}>📄 {importPreview.fileName}</div>
+              <div style={{ fontSize: 13, color: "var(--teal-dark)", lineHeight: 1.8 }}>
+                <div>👤 Person: <strong>{importPreview.personName || "taken from file rows"}</strong></div>
+                <div>📋 Records found: <strong>{importPreview.records.length}</strong></div>
+                <div>📅 Date range: <strong>
+                  {importPreview.records.reduce((a, r) => r.date < a ? r.date : a, "9999")}
+                  {" → "}
+                  {importPreview.records.reduce((a, r) => r.date > a ? r.date : a, "")}
+                </strong></div>
+                <div>🩺 Check types: <strong>{[...new Set(importPreview.records.map(r => r.checkTypeName))].join(", ")}</strong></div>
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--slate)", marginBottom: 14 }}>
+              New persons and check types will be created automatically. Existing duplicates will be skipped.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn btn-secondary" onClick={() => setImportPreview(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmImport}>✓ Confirm Import</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Download by person */}
