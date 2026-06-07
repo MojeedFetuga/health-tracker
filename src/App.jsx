@@ -600,6 +600,16 @@ function LogCheckTab({ data, save, toast }) {
   const selectedCheck = data.checkTypes.find(c => c.id === checkTypeId);
   const liveRange = selectedCheck && value.trim() ? getRangeInfo(selectedCheck.name, selectedCheck.unit, value) : null;
 
+  // Duplicate detection — runs as the user fills the form (no button click needed)
+  const duplicate = personId && checkTypeId && date && session
+    ? data.records.find(r =>
+        r.personId === personId &&
+        r.checkTypeId === checkTypeId &&
+        r.date === date &&
+        r.session === session
+      )
+    : null;
+
   const log = () => {
     if (!personId || !checkTypeId || !value.trim() || !date) return alert("Please fill all required fields.");
     const record = { id: generateId(), personId, checkTypeId, value: value.trim(), session, date, notes: notes.trim(), createdAt: new Date().toISOString() };
@@ -646,6 +656,20 @@ function LogCheckTab({ data, save, toast }) {
           <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
         </div>
       </div>
+      {/* Duplicate warning */}
+      {duplicate && (
+        <div className="alert-box" style={{ background: "#fef3c7", border: "1px solid #fde68a", marginTop: 14 }}>
+          <span style={{ fontSize: 20 }}>⚠️</span>
+          <div>
+            <strong style={{ color: "#92400e" }}>Already logged — {selectedCheck?.name} ({session})</strong>
+            <p style={{ color: "#92400e" }}>
+              A {session.toLowerCase()} reading of <strong>{duplicate.value}{selectedCheck?.unit ? ` ${selectedCheck.unit}` : ""}</strong> was already recorded on {duplicate.date}.
+              You can still save a new entry if the reading changed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Live range alert */}
       {liveRange && liveRange.status !== "normal" && (
         <div className="alert-box" style={{ background: liveRange.bg, border: `1px solid ${liveRange.color}22` }}>
