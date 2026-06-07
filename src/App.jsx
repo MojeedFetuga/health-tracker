@@ -429,9 +429,13 @@ function Toast({ msg, onDone }) {
 
 // ── PERSONS TAB ───────────────────────────────────────────────────────────────
 function PersonsTab({ data, save, toast }) {
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("");
+  const [name, setName]   = useState("");
+  const [age, setAge]     = useState("");
   const [notes, setNotes] = useState("");
+
+  // Edit modal state
+  const [editing, setEditing] = useState(null);
+  const [ef, setEf]           = useState({});
 
   const add = () => {
     if (!name.trim()) return;
@@ -446,8 +450,47 @@ function PersonsTab({ data, save, toast }) {
     toast("Person removed");
   };
 
+  const openEdit = (p) => {
+    setEditing(p);
+    setEf({ name: p.name, age: p.age || "", notes: p.notes || "" });
+  };
+
+  const saveEdit = () => {
+    if (!ef.name.trim()) return;
+    save({ ...data, persons: data.persons.map(p => p.id === editing.id ? { ...p, ...ef, name: ef.name.trim() } : p) });
+    setEditing(null);
+    toast("Person updated");
+  };
+
   return (
     <div>
+      {/* Edit modal */}
+      {editing && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditing(null)}>
+          <div className="modal">
+            <div className="modal-title"><span className="dot" />Edit Person</div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Full Name *</label>
+                <input value={ef.name} onChange={e => setEf(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Amaka Johnson" />
+              </div>
+              <div className="form-group">
+                <label>Age</label>
+                <input type="number" value={ef.age} onChange={e => setEf(f => ({ ...f, age: e.target.value }))} placeholder="e.g. 34" />
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label>Notes</label>
+                <input value={ef.notes} onChange={e => setEf(f => ({ ...f, notes: e.target.value }))} placeholder="Optional note" />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveEdit}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-title"><span className="dot" />Add New Person</div>
         <div className="form-grid">
@@ -481,6 +524,7 @@ function PersonsTab({ data, save, toast }) {
                   {data.records.filter(r => r.personId === p.id).length} records
                 </div>
                 <div className="person-actions">
+                  <button className="btn btn-amber btn-sm" onClick={() => openEdit(p)}>✎ Edit</button>
                   <button className="btn btn-danger btn-sm" onClick={() => remove(p.id)}>Remove</button>
                 </div>
               </div>
