@@ -744,6 +744,40 @@ function RecordsTab({ data, save, toast }) {
   const [importPreview, setImportPreview] = useState(null); // { personName, records, fileName }
   const fileInputRef = useRef(null);
 
+  // Share state
+  const [shareState, setShareState] = useState(null); // { personId, text } | null
+
+  const buildShareText = (personId) => {
+    const person = data.persons.find(p => p.id === personId);
+    if (!person) return "";
+    const recs = data.records
+      .filter(r => r.personId === personId)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const generated = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+
+    let t = `📊 *MetricHealth Report — ${person.name}*\n`;
+    if (person.age) t += `Age: ${person.age}\n`;
+    t += `Generated: ${generated}\n`;
+    t += `Total records: ${recs.length}\n\n`;
+
+    for (const ct of data.checkTypes) {
+      const ctRecs = recs.filter(r => r.checkTypeId === ct.id);
+      if (ctRecs.length === 0) continue;
+      t += `🩺 *${ct.name}${ct.unit ? ` (${ct.unit})` : ""}*\n`;
+      ctRecs.slice(0, 6).forEach(r => {
+        const info = getRangeInfo(ct.name, ct.unit, r.value);
+        const flag = info && info.status !== "normal" ? ` ⚠ ${info.label}` : " ✓ Normal";
+        t += `• ${r.date} ${r.session}: ${r.value}${ct.unit ? " " + ct.unit : ""}${flag}\n`;
+      });
+      if (ctRecs.length > 6) t += `  … and ${ctRecs.length - 6} more\n`;
+      t += "\n";
+    }
+    t += `📱 Track your health at metrichealth.vercel.app`;
+    return t;
+  };
+
+  const openShare = (personId) => setShareState({ personId, text: buildShareText(personId) });
+
   const getName  = (id) => data.persons.find(p => p.id === id)?.name || "Unknown";
   const getCheck = (id) => data.checkTypes.find(c => c.id === id);
 
@@ -1052,6 +1086,73 @@ function RecordsTab({ data, save, toast }) {
 
   return (
     <div>
+      {/* Share modal */}
+      {shareState && (() => {
+        const person = data.persons.find(p => p.id === shareState.personId);
+        const encodedText = encodeURIComponent(shareState.text);
+        const canNativeShare = typeof navigator.share === "function";
+        return (
+          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShareState(null)}>
+            <div className="modal" style={{ maxWidth: 480 }}>
+              <div className="modal-title"><span className="dot" />Share Report — {person?.name}</div>
+
+              {/* Text preview */}
+              <pre style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 11.5, lineHeight: 1.7,
+                background: "var(--slate-light)", border: "1px solid var(--border)",
+                borderRadius: 10, padding: "12px 14px", overflowY: "auto",
+                maxHeight: 240, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                color: "var(--ink)", marginBottom: 16,
+              }}>{shareState.text}</pre>
+
+              {/* Share buttons */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodedText}`}
+                  target="_blank" rel="noreferrer"
+                  className="btn btn-primary"
+                  style={{ textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor"><path d="M16 0C7.163 0 0 7.163 0 16c0 2.84.742 5.5 2.04 7.808L0 32l8.394-2.01A15.938 15.938 0 0016 32c8.837 0 16-7.163 16-16S24.837 0 16 0zm8.26 22.357c-.347.974-2.02 1.86-2.777 1.98-.712.116-1.61.165-2.597-.163-.599-.2-1.368-.467-2.352-.912-4.14-1.88-6.845-6.09-7.051-6.373-.207-.283-1.687-2.245-1.687-4.28s1.068-3.04 1.447-3.453c.38-.413.827-.516 1.104-.516.276 0 .553.003.795.015.256.012.598-.097.937.714.347.83 1.178 2.865 1.28 3.073.103.208.172.45.035.726-.138.277-.207.45-.413.692-.207.241-.435.539-.62.724-.208.207-.424.43-.182.844.241.415 1.074 1.77 2.306 2.866 1.585 1.41 2.921 1.847 3.334 2.054.414.207.655.172.896-.103.241-.276 1.033-1.205 1.309-1.619.276-.414.552-.345.931-.207.38.138 2.408 1.136 2.822 1.343.414.207.69.31.793.483.103.172.103 1.001-.243 1.974z"/></svg>
+                  WhatsApp
+                </a>
+                <a
+                  href={`mailto:?subject=MetricHealth Report — ${encodeURIComponent(person?.name || "")}&body=${encodedText}`}
+                  className="btn btn-secondary"
+                  style={{ textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+                >
+                  ✉ Email
+                </a>
+                {canNativeShare && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ gridColumn: "1 / -1" }}
+                    onClick={() => navigator.share({ title: `MetricHealth — ${person?.name}`, text: shareState.text }).catch(() => {})}
+                  >
+                    🌐 Share via…
+                  </button>
+                )}
+                <button
+                  className="btn btn-secondary"
+                  style={{ gridColumn: canNativeShare ? undefined : "1 / -1" }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareState.text)
+                      .then(() => toast("Report copied to clipboard"))
+                      .catch(() => toast("Copy failed — select the text above manually"));
+                  }}
+                >
+                  📋 Copy text
+                </button>
+              </div>
+
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={() => setShareState(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Edit modal */}
       {editing && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditing(null)}>
@@ -1159,6 +1260,7 @@ function RecordsTab({ data, save, toast }) {
                 <div className="person-actions">
                   <button className="btn btn-amber btn-sm" onClick={() => downloadReport(p.id)}>⬇ Excel</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => printReport(p.id)}>🖨 Print</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => openShare(p.id)}>📤 Share</button>
                 </div>
               </div>
             ))}
