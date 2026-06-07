@@ -210,6 +210,12 @@ const STYLES = `
   .setup-guide code { font-family: 'DM Mono', monospace; background: rgba(0,0,0,0.08); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
   .setup-guide a { color: var(--teal-dark); }
 
+  /* RANGE ALERTS */
+  .range-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; white-space: nowrap; }
+  .alert-box { border-radius: 10px; padding: 11px 14px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; line-height: 1.5; }
+  .alert-box strong { display: block; font-size: 13px; margin-bottom: 2px; }
+  .alert-box p { margin: 0; font-size: 12px; opacity: 0.85; }
+
   /* CHARTS TAB */
   .charts-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 24px; }
   .charts-filters .form-group { min-width: 160px; flex: 1; }
@@ -302,6 +308,81 @@ function generateId() {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// ── RANGE INFO ────────────────────────────────────────────────────────────────
+// Returns { status, label, color, bg, advice } or null if type is unrecognised.
+function getRangeInfo(name = "", unit = "", valueStr = "") {
+  const n = name.toLowerCase();
+  const u = unit.toLowerCase().replace(/\s/g, "");
+
+  const isBP    = n.includes("blood pressure") || n === "bp" || n.includes(" bp") || u === "mmhg";
+  const isTemp  = n.includes("temp") || u === "°c" || u === "c" || u === "°f" || u === "f";
+  const isSugar = n.includes("blood sugar") || n.includes("glucose") || n.includes("sugar") || u === "mg/dl" || u === "mmol/l";
+  const isPulse = n.includes("pulse") || n.includes("heart rate") || u === "bpm";
+  const isOxy   = n.includes("oxygen") || n.includes("spo2") || n.includes("o2") || u === "%" ;
+
+  if (isBP) {
+    const parts = String(valueStr).split("/").map(s => parseInt(s, 10));
+    const sys = parts[0], dia = parts[1];
+    if (isNaN(sys)) return null;
+    if (sys > 180 || (dia && dia > 120))  return { status: "crisis",   label: "Crisis",       color: "#b91c1c", bg: "#fee2e2", advice: "Seek immediate medical attention." };
+    if (sys >= 140 || (dia && dia >= 90)) return { status: "high",     label: "High",         color: "#e11d48", bg: "#ffe4e6", advice: "Blood pressure is high. Consult a doctor." };
+    if (sys >= 130 || (dia && dia >= 80)) return { status: "elevated", label: "Elevated",     color: "#d97706", bg: "#fef3c7", advice: "Slightly above normal. Monitor regularly." };
+    if (sys < 90  || (dia && dia < 60))  return { status: "low",      label: "Low",           color: "#7c3aed", bg: "#ede9fe", advice: "Blood pressure is low. Rest and stay hydrated." };
+    return { status: "normal", label: "Normal", color: "#0f766e", bg: "#ccfbf1", advice: null };
+  }
+
+  if (isTemp) {
+    const raw = parseFloat(valueStr);
+    if (isNaN(raw)) return null;
+    const v = (u === "°f" || u === "f") ? (raw - 32) * 5 / 9 : raw;
+    if (v > 39.0)  return { status: "high",     label: "High Fever", color: "#e11d48", bg: "#ffe4e6", advice: "High fever. Seek medical advice promptly." };
+    if (v > 38.0)  return { status: "elevated", label: "Fever",      color: "#d97706", bg: "#fef3c7", advice: "Fever detected. Rest and stay hydrated." };
+    if (v > 37.2)  return { status: "elevated", label: "Low Fever",  color: "#d97706", bg: "#fef3c7", advice: "Slight fever. Monitor closely." };
+    if (v < 35.0)  return { status: "low",      label: "Hypothermia",color: "#7c3aed", bg: "#ede9fe", advice: "Temperature is dangerously low. Seek medical attention." };
+    return { status: "normal", label: "Normal", color: "#0f766e", bg: "#ccfbf1", advice: null };
+  }
+
+  if (isSugar) {
+    const v = parseFloat(valueStr);
+    if (isNaN(v)) return null;
+    if (v >= 200)  return { status: "high",     label: "Very High",    color: "#e11d48", bg: "#ffe4e6", advice: "Very high blood sugar. Consult a doctor." };
+    if (v >= 126)  return { status: "high",     label: "High",         color: "#e11d48", bg: "#ffe4e6", advice: "Blood sugar is high. Monitor diet and consult a doctor." };
+    if (v >= 100)  return { status: "elevated", label: "Pre-Diabetic", color: "#d97706", bg: "#fef3c7", advice: "Borderline high. Consider dietary changes." };
+    if (v < 54)    return { status: "low",      label: "Very Low",     color: "#b91c1c", bg: "#fee2e2", advice: "Dangerously low blood sugar. Take sugar immediately." };
+    if (v < 70)    return { status: "low",      label: "Low",          color: "#7c3aed", bg: "#ede9fe", advice: "Low blood sugar. Eat or drink something sweet." };
+    return { status: "normal", label: "Normal", color: "#0f766e", bg: "#ccfbf1", advice: null };
+  }
+
+  if (isPulse) {
+    const v = parseFloat(valueStr);
+    if (isNaN(v)) return null;
+    if (v > 150)   return { status: "high",     label: "Very High", color: "#e11d48", bg: "#ffe4e6", advice: "Very high heart rate. Seek medical attention." };
+    if (v > 100)   return { status: "elevated", label: "Elevated",  color: "#d97706", bg: "#fef3c7", advice: "Heart rate above normal range. Rest and monitor." };
+    if (v < 40)    return { status: "low",      label: "Very Low",  color: "#b91c1c", bg: "#fee2e2", advice: "Very low heart rate. Seek medical attention." };
+    if (v < 60)    return { status: "low",      label: "Low",       color: "#7c3aed", bg: "#ede9fe", advice: "Heart rate slightly low (bradycardia). Monitor." };
+    return { status: "normal", label: "Normal", color: "#0f766e", bg: "#ccfbf1", advice: null };
+  }
+
+  if (isOxy) {
+    const v = parseFloat(valueStr);
+    if (isNaN(v)) return null;
+    if (v < 90)   return { status: "high",     label: "Critically Low", color: "#b91c1c", bg: "#fee2e2", advice: "O₂ saturation critically low. Seek immediate help." };
+    if (v < 94)   return { status: "elevated", label: "Low",            color: "#d97706", bg: "#fef3c7", advice: "O₂ saturation below normal. Monitor closely." };
+    return { status: "normal", label: "Normal", color: "#0f766e", bg: "#ccfbf1", advice: null };
+  }
+
+  return null;
+}
+
+function RangeBadge({ info }) {
+  if (!info) return null;
+  return (
+    <span className="range-badge" style={{ color: info.color, background: info.bg }}>
+      {info.status !== "normal" && "⚠ "}{info.label}
+    </span>
+  );
 }
 
 function useStorage() {
@@ -455,6 +536,7 @@ function LogCheckTab({ data, save, toast }) {
   const [notes, setNotes] = useState("");
 
   const selectedCheck = data.checkTypes.find(c => c.id === checkTypeId);
+  const liveRange = selectedCheck && value.trim() ? getRangeInfo(selectedCheck.name, selectedCheck.unit, value) : null;
 
   const log = () => {
     if (!personId || !checkTypeId || !value.trim() || !date) return alert("Please fill all required fields.");
@@ -502,6 +584,19 @@ function LogCheckTab({ data, save, toast }) {
           <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
         </div>
       </div>
+      {/* Live range alert */}
+      {liveRange && liveRange.status !== "normal" && (
+        <div className="alert-box" style={{ background: liveRange.bg, border: `1px solid ${liveRange.color}22` }}>
+          <span style={{ fontSize: 20 }}>
+            {liveRange.status === "high" || liveRange.status === "crisis" ? "🔴" : liveRange.status === "low" ? "🟣" : "🟡"}
+          </span>
+          <div>
+            <strong style={{ color: liveRange.color }}>{liveRange.label} — {selectedCheck?.name}</strong>
+            <p style={{ color: liveRange.color }}>{liveRange.advice}</p>
+          </div>
+        </div>
+      )}
+
       <button className="btn btn-primary btn-full mt-4" onClick={log}>✓ Record Check</button>
     </div>
   );
@@ -690,12 +785,16 @@ function RecordsTab({ data, save, toast }) {
               <tbody>
                 {filtered.map(r => {
                   const ct = getCheck(r.checkTypeId);
+                  const info = ct ? getRangeInfo(ct.name, ct.unit, r.value) : null;
                   return (
                     <tr key={r.id}>
                       <td style={{ fontFamily: "'DM Mono', monospace", fontSize: 13 }}>{r.date}</td>
                       <td className="fw-bold">{getName(r.personId)}</td>
                       <td>{ct?.name || "—"}</td>
-                      <td style={{ fontFamily: "'DM Mono', monospace" }}>{r.value} {ct?.unit}</td>
+                      <td style={{ fontFamily: "'DM Mono', monospace" }}>
+                        {r.value} {ct?.unit}
+                        {info && <><br /><RangeBadge info={info} /></>}
+                      </td>
                       <td><span className={`badge badge-${r.session.toLowerCase()}`}>{r.session}</span></td>
                       <td className="text-slate text-sm">{r.notes || "—"}</td>
                       <td style={{ display: "flex", gap: 4 }}>
