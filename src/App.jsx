@@ -694,8 +694,19 @@ function BackupTab({ data, save, toast, isOnline }) {
     try {
       await signInWithGoogle();
       toast("Signed in with Google");
-    } catch {
-      setStatus({ type: "error", msg: "Sign-in was cancelled or failed. Please try again." });
+    } catch (e) {
+      const code = e?.code || "";
+      let msg = "Sign-in failed. Please try again.";
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        msg = "Sign-in popup was closed. Please try again.";
+      } else if (code === "auth/popup-blocked") {
+        msg = "Popup was blocked by your browser. Please allow popups for this site and try again.";
+      } else if (code === "auth/unauthorized-domain") {
+        msg = "This domain is not authorised in Firebase. Add it under Authentication → Settings → Authorized domains.";
+      } else if (code) {
+        msg = `Sign-in failed (${code}). Please try again.`;
+      }
+      setStatus({ type: "error", msg });
     } finally {
       setAuthLoading(false);
     }
