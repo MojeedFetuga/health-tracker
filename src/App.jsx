@@ -137,6 +137,15 @@ const STYLES = `
   .toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 999; box-shadow: var(--shadow-lg); animation: slideIn 0.3s ease; }
   @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(26,26,46,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; animation: fadeIn 0.15s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal { background: var(--white); border-radius: 16px; padding: 24px; width: 100%; max-width: 540px; box-shadow: var(--shadow-lg); animation: slideUp 0.2s ease; }
+  @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; margin-bottom: 18px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; flex-wrap: wrap; }
+  @media (max-width: 520px) { .modal { padding: 16px; border-radius: 12px; } .modal-actions { justify-content: stretch; } .modal-actions .btn { flex: 1; justify-content: center; } }
+
   /* OFFLINE BANNER */
   .offline-banner { background: #451a03; color: #fef3c7; padding: 8px 16px; text-align: center; font-size: 13px; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; border-radius: 10px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; }
   .online-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-family: 'DM Mono', monospace; padding: 4px 10px; border-radius: 20px; border: 1.5px solid; }
@@ -489,7 +498,11 @@ function RecordsTab({ data, save, toast }) {
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
 
-  const getName = (id) => data.persons.find(p => p.id === id)?.name || "Unknown";
+  // Edit modal state
+  const [editing, setEditing] = useState(null); // record being edited
+  const [ef, setEf] = useState({});             // edit form fields
+
+  const getName  = (id) => data.persons.find(p => p.id === id)?.name || "Unknown";
   const getCheck = (id) => data.checkTypes.find(c => c.id === id);
 
   const filtered = data.records.filter(r => {
@@ -500,6 +513,18 @@ function RecordsTab({ data, save, toast }) {
     return true;
   }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 
+  function openEdit(r) {
+    setEditing(r);
+    setEf({ personId: r.personId, checkTypeId: r.checkTypeId, value: r.value, session: r.session, date: r.date, notes: r.notes || "" });
+  }
+
+  function saveEdit() {
+    if (!ef.value.trim() || !ef.date) return;
+    save({ ...data, records: data.records.map(r => r.id === editing.id ? { ...r, ...ef, updatedAt: new Date().toISOString() } : r) });
+    setEditing(null);
+    toast("Record updated");
+  }
+
   const deleteRecord = (id) => {
     save({ ...data, records: data.records.filter(r => r.id !== id) });
     toast("Record deleted");
@@ -509,11 +534,8 @@ function RecordsTab({ data, save, toast }) {
     const person = data.persons.find(p => p.id === personId);
     if (!person) return;
     const personRecords = data.records.filter(r => r.personId === personId).sort((a, b) => a.date.localeCompare(b.date));
-
     const wb = XLSX.utils.book_new();
-
-    // Summary sheet
-    const summaryRows = [["Health Check Report"], [`Person: ${person.name}`], [`Age: ${person.age || "N/A"}`], [`Notes: ${person.notes || "N/A"}`], [`Generated: ${new Date().toLocaleString()}`], [], ["Date", "Check Type", "Value", "Unit", "Session", "Notes"]];
+    const summaryRows = [["MetricHealth Report"], [`Person: ${person.name}`], [`Age: ${person.age || "N/A"}`], [`Notes: ${person.notes || "N/A"}`], [`Generated: ${new Date().toLocaleString()}`], [], ["Date", "Check Type", "Value", "Unit", "Session", "Notes"]];
     personRecords.forEach(r => {
       const ct = getCheck(r.checkTypeId);
       summaryRows.push([r.date, ct?.name || "Unknown", r.value, ct?.unit || "", r.session, r.notes]);
@@ -521,8 +543,6 @@ function RecordsTab({ data, save, toast }) {
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
     summarySheet["!cols"] = [{ wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 24 }];
     XLSX.utils.book_append_sheet(wb, summarySheet, "All Records");
-
-    // Per check type sheets
     data.checkTypes.forEach(ct => {
       const ctRecords = personRecords.filter(r => r.checkTypeId === ct.id);
       if (ctRecords.length === 0) return;
@@ -532,21 +552,64 @@ function RecordsTab({ data, save, toast }) {
       sheet["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 24 }];
       XLSX.utils.book_append_sheet(wb, sheet, ct.name.slice(0, 31));
     });
-
-    XLSX.writeFile(wb, `${person.name.replace(/\s+/g, "_")}_HealthReport.xlsx`);
+    XLSX.writeFile(wb, `${person.name.replace(/\s+/g, "_")}_MetricHealth.xlsx`);
     toast(`Report downloaded for ${person.name}`);
   };
 
-  const totalPersons = data.persons.length;
-  const totalRecords = data.records.length;
-  const todayRecords = data.records.filter(r => r.date === today()).length;
+  const selectedEditCheck = data.checkTypes.find(c => c.id === ef.checkTypeId);
 
   return (
     <div>
+      {/* Edit modal */}
+      {editing && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditing(null)}>
+          <div className="modal">
+            <div className="modal-title"><span className="dot" />Edit Record</div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Person *</label>
+                <select value={ef.personId} onChange={e => setEf(f => ({ ...f, personId: e.target.value }))}>
+                  {data.persons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Check Type *</label>
+                <select value={ef.checkTypeId} onChange={e => setEf(f => ({ ...f, checkTypeId: e.target.value }))}>
+                  {data.checkTypes.map(c => <option key={c.id} value={c.id}>{c.name}{c.unit ? ` (${c.unit})` : ""}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Value * {selectedEditCheck?.unit ? `(${selectedEditCheck.unit})` : ""}</label>
+                <input value={ef.value} onChange={e => setEf(f => ({ ...f, value: e.target.value }))} placeholder="Enter reading" />
+              </div>
+              <div className="form-group">
+                <label>Session *</label>
+                <select value={ef.session} onChange={e => setEf(f => ({ ...f, session: e.target.value }))}>
+                  <option>Morning</option>
+                  <option>Evening</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Date *</label>
+                <input type="date" value={ef.date} onChange={e => setEf(f => ({ ...f, date: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label>Notes</label>
+                <input value={ef.notes} onChange={e => setEf(f => ({ ...f, notes: e.target.value }))} placeholder="Optional" />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveEdit}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="stats-row">
-        <div className="stat-box"><div className="stat-value">{totalPersons}</div><div className="stat-label">Persons</div></div>
-        <div className="stat-box"><div className="stat-value">{totalRecords}</div><div className="stat-label">Total Records</div></div>
-        <div className="stat-box"><div className="stat-value">{todayRecords}</div><div className="stat-label">Today's Checks</div></div>
+        <div className="stat-box"><div className="stat-value">{data.persons.length}</div><div className="stat-label">Persons</div></div>
+        <div className="stat-box"><div className="stat-value">{data.records.length}</div><div className="stat-label">Total Records</div></div>
+        <div className="stat-box"><div className="stat-value">{data.records.filter(r => r.date === today()).length}</div><div className="stat-label">Today's Checks</div></div>
         <div className="stat-box"><div className="stat-value">{data.checkTypes.length}</div><div className="stat-label">Check Types</div></div>
       </div>
 
@@ -619,7 +682,10 @@ function RecordsTab({ data, save, toast }) {
                       <td style={{ fontFamily: "'DM Mono', monospace" }}>{r.value} {ct?.unit}</td>
                       <td><span className={`badge badge-${r.session.toLowerCase()}`}>{r.session}</span></td>
                       <td className="text-slate text-sm">{r.notes || "—"}</td>
-                      <td><button className="btn btn-danger btn-sm" onClick={() => deleteRecord(r.id)}>✕</button></td>
+                      <td style={{ display: "flex", gap: 4 }}>
+                        <button className="btn btn-amber btn-sm" onClick={() => openEdit(r)} title="Edit">✎</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteRecord(r.id)} title="Delete">✕</button>
+                      </td>
                     </tr>
                   );
                 })}
