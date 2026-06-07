@@ -307,7 +307,45 @@ const STYLES = `
     pre { overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
   }
 
-  /* ── DARK MODE ──────────────────────────────────────────────────────────── */
+  /* ── PIN LOCK ───────────────────────────────────────────────────────────── */
+  .lock-screen { position: fixed; inset: 0; background: var(--ink); color: var(--cream); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; z-index: 9999; font-family: 'Syne', sans-serif; }
+  .lock-brand { font-family: 'DM Serif Display', serif; font-size: 36px; margin-bottom: 4px; }
+  .lock-brand span { color: var(--teal); font-style: italic; }
+  .lock-sub { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; font-family: 'DM Mono', monospace; opacity: .5; margin-bottom: 40px; }
+  .lock-label { font-size: 14px; font-weight: 600; letter-spacing: .04em; margin-bottom: 20px; min-height: 20px; }
+  .lock-label.error { color: var(--rose); }
+  .pin-dots { display: flex; gap: 18px; margin-bottom: 36px; }
+  .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); transition: background .15s, border-color .15s; }
+  .pin-dot.filled { background: var(--teal); border-color: var(--teal); }
+  .pin-dot.error-dot { background: var(--rose); border-color: var(--rose); }
+  .pin-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+  .pin-btn { width: 72px; height: 72px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); color: inherit; font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 600; cursor: pointer; transition: background .15s; display: flex; align-items: center; justify-content: center; }
+  .pin-btn:hover { background: rgba(255,255,255,.16); }
+  .pin-btn:active { background: rgba(255,255,255,.25); }
+  .pin-btn-ghost { background: transparent; border-color: transparent; font-size: 20px; opacity: .6; }
+  .pin-btn-ghost:hover { background: rgba(255,255,255,.08); opacity: 1; }
+  @keyframes pin-shake {
+    0%,100%{ transform:translateX(0) }
+    20%    { transform:translateX(-10px) }
+    40%    { transform:translateX(10px) }
+    60%    { transform:translateX(-7px) }
+    80%    { transform:translateX(7px) }
+  }
+  .pin-shake { animation: pin-shake .45s ease; }
+
+  /* In-app PIN setup pad (light/dark aware) */
+  .pin-setup-wrap { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 12px 0 4px; }
+  .pin-setup-label { font-size: 13px; font-weight: 700; margin-bottom: 16px; color: var(--ink); text-align: center; }
+  .pin-setup-dots { display: flex; gap: 14px; margin-bottom: 24px; }
+  .pin-setup-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); transition: background .15s, border-color .15s; }
+  .pin-setup-dot.filled { background: var(--teal); border-color: var(--teal); }
+  .pin-setup-pad { display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; }
+  .pin-setup-btn { width: 60px; height: 60px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--slate-light); color: var(--ink); font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 600; cursor: pointer; transition: background .15s; }
+  .pin-setup-btn:hover { background: var(--border); }
+  .pin-setup-btn-ghost { background: transparent; border-color: transparent; opacity: .5; font-size: 18px; }
+  .pin-setup-btn-ghost:hover { background: var(--slate-light); opacity: 1; }
+
+  /* ── DARK MODE ───────────────────────────────────────────────────────────── */
   [data-theme="dark"] {
     --cream:       #0d1117;
     --ink:         #e2e8f0;
@@ -458,6 +496,163 @@ function useStorage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   };
   return [data, save];
+}
+
+// ── PIN UTILITIES ─────────────────────────────────────────────────────────────
+const PIN_KEY = "mh_pin_hash";
+
+async function hashPin(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("mh-salt:" + pin));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+const hasPinSet  = ()          => !!localStorage.getItem(PIN_KEY);
+const savePin    = async (pin) => localStorage.setItem(PIN_KEY, await hashPin(pin));
+const clearPin   = ()          => localStorage.removeItem(PIN_KEY);
+const checkPin   = async (pin) => (await hashPin(pin)) === localStorage.getItem(PIN_KEY);
+
+// Reusable numeric pad (used in both LockScreen and PinSetup)
+function PinPad({ digits, onDigit, onDelete, onCancel, btnClass = "pin-btn", dotClass = "pin-dot", wrapClass = "pin-pad", dotsClass = "pin-dots", errorDot = false, shake = false }) {
+  return (
+    <>
+      <div className={dotsClass + (shake ? " pin-shake" : "")}>
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} className={`${dotClass}${digits.length > i ? " filled" : ""}${errorDot ? " error-dot" : ""}`} />
+        ))}
+      </div>
+      <div className={wrapClass}>
+        {[1,2,3,4,5,6,7,8,9].map(d => (
+          <button key={d} className={btnClass} onClick={() => onDigit(String(d))}>{d}</button>
+        ))}
+        <button className={`${btnClass} ${btnClass}-ghost`} onClick={onDelete}>⌫</button>
+        <button className={btnClass} onClick={() => onDigit("0")}>0</button>
+        {onCancel
+          ? <button className={`${btnClass} ${btnClass}-ghost`} onClick={onCancel}>✕</button>
+          : <div />}
+      </div>
+    </>
+  );
+}
+
+// ── LOCK SCREEN ───────────────────────────────────────────────────────────────
+function LockScreen({ onUnlock }) {
+  const [digits, setDigits] = useState([]);
+  const [shake, setShake]   = useState(false);
+  const [errDot, setErrDot] = useState(false);
+
+  const enter = async (d) => {
+    if (digits.length >= 4) return;
+    const next = [...digits, d];
+    setDigits(next);
+    if (next.length === 4) {
+      const ok = await checkPin(next.join(""));
+      if (ok) { onUnlock(); }
+      else {
+        setShake(true); setErrDot(true);
+        setTimeout(() => { setDigits([]); setShake(false); setErrDot(false); }, 600);
+      }
+    }
+  };
+
+  return (
+    <div className="lock-screen">
+      <div className="lock-brand">Metric<span>Health</span></div>
+      <div className="lock-sub">Enter PIN to continue</div>
+      <div className={`lock-label${errDot ? " error" : ""}`}>
+        {errDot ? "Incorrect PIN — try again" : ""}
+      </div>
+      <PinPad
+        digits={digits} onDigit={enter} onDelete={() => setDigits(d => d.slice(0, -1))}
+        shake={shake} errorDot={errDot}
+      />
+    </div>
+  );
+}
+
+// ── PIN SETUP CARD ────────────────────────────────────────────────────────────
+function PinCard({ toast }) {
+  const [step, setStep]       = useState("idle"); // idle | set1 | set2 | removing
+  const [first, setFirst]     = useState("");      // PIN from step 1
+  const [digits, setDigits]   = useState([]);
+  const [mismatch, setMismatch] = useState(false);
+  const pinActive = hasPinSet();
+
+  const reset = () => { setStep("idle"); setDigits([]); setFirst(""); setMismatch(false); };
+
+  const enter = async (d) => {
+    if (digits.length >= 4) return;
+    const next = [...digits, d];
+    setDigits(next);
+    if (next.length < 4) return;
+
+    const pin = next.join("");
+    if (step === "set1") {
+      setFirst(pin); setDigits([]); setStep("set2");
+    } else if (step === "set2") {
+      if (pin !== first) {
+        setMismatch(true);
+        setTimeout(() => { setDigits([]); setMismatch(false); }, 600);
+      } else {
+        await savePin(pin);
+        toast("PIN set successfully");
+        reset();
+      }
+    }
+  };
+
+  const handleRemove = () => { clearPin(); toast("PIN removed"); reset(); };
+
+  if (step !== "idle") {
+    const label = step === "set1"
+      ? (pinActive ? "Enter new PIN" : "Choose a 4-digit PIN")
+      : (mismatch ? "PINs didn't match — try again" : "Confirm your PIN");
+    return (
+      <div className="card">
+        <div className="card-title"><span className="dot" />
+          {step === "set1" ? "Set PIN" : "Confirm PIN"}
+        </div>
+        <div className="pin-setup-wrap">
+          <div className={`pin-setup-label${mismatch ? " error" : ""}`} style={mismatch ? { color: "var(--rose)" } : {}}>
+            {label}
+          </div>
+          <PinPad
+            digits={digits} onDigit={enter}
+            onDelete={() => setDigits(d => d.slice(0, -1))}
+            onCancel={reset}
+            btnClass="pin-setup-btn" dotClass="pin-setup-dot"
+            wrapClass="pin-setup-pad" dotsClass="pin-setup-dots"
+            shake={mismatch} errorDot={mismatch}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title"><span className="dot" />App PIN Lock</div>
+      <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 18, lineHeight: 1.6 }}>
+        {pinActive
+          ? "A PIN is set. The app will ask for it every time you open it. Your PIN is stored as a secure hash — never in plain text."
+          : "Protect your health data with a 4-digit PIN. You'll enter it each time you open the app."
+        }
+      </p>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button className="btn btn-primary" onClick={() => { setDigits([]); setStep("set1"); }}>
+          {pinActive ? "🔄 Change PIN" : "🔒 Set PIN"}
+        </button>
+        {pinActive && (
+          <button className="btn btn-danger btn-sm" onClick={handleRemove}>
+            Remove PIN
+          </button>
+        )}
+      </div>
+      {pinActive && (
+        <div className="msg-bar success" style={{ marginTop: 14 }}>
+          ✓ PIN is active — app is protected
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Toast({ msg, onDone }) {
@@ -1848,21 +2043,24 @@ service cloud.firestore {
   // Sign-in screen for users who haven't signed in yet
   if (!user) {
     return (
-      <div className="card">
-        <div className="card-title"><span className="dot" />Cloud Backup</div>
-        <div className="backup-center">
-          <div className="backup-center-icon">☁</div>
-          <h3>Back up your health data</h3>
-          <p>
-            Sign in with your Google account to save your records securely to the cloud.
-            If you ever lose or change your device, you can restore everything instantly.
-          </p>
-          <button className="btn-google" onClick={handleSignIn} disabled={authLoading}>
-            {GOOGLE_SVG}
-            {authLoading ? "Connecting…" : "Sign in with Google"}
-          </button>
-          {status && <div className={`msg-bar ${status.type}`} style={{ marginTop: 16, justifyContent: "center" }}>{status.msg}</div>}
+      <div>
+        <div className="card">
+          <div className="card-title"><span className="dot" />Cloud Backup</div>
+          <div className="backup-center">
+            <div className="backup-center-icon">☁</div>
+            <h3>Back up your health data</h3>
+            <p>
+              Sign in with your Google account to save your records securely to the cloud.
+              If you ever lose or change your device, you can restore everything instantly.
+            </p>
+            <button className="btn-google" onClick={handleSignIn} disabled={authLoading}>
+              {GOOGLE_SVG}
+              {authLoading ? "Connecting…" : "Sign in with Google"}
+            </button>
+            {status && <div className={`msg-bar ${status.type}`} style={{ marginTop: 16, justifyContent: "center" }}>{status.msg}</div>}
+          </div>
         </div>
+        <PinCard toast={toast} />
       </div>
     );
   }
@@ -1926,6 +2124,8 @@ service cloud.firestore {
           {status.type === "success" ? "✓" : status.type === "error" ? "✕" : "ℹ"} {status.msg}
         </div>
       )}
+
+      <PinCard toast={toast} />
     </div>
   );
 }
@@ -1937,6 +2137,9 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState("");
   const isOnline             = useOnlineStatus();
   const toast                = (msg) => setToastMsg(msg);
+
+  // ── PIN lock ──────────────────────────────────────────────────────────────
+  const [locked, setLocked] = useState(() => hasPinSet());
 
   // ── Dark mode ─────────────────────────────────────────────────────────────
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("mh_theme") === "dark");
@@ -1998,6 +2201,16 @@ export default function App() {
     }, 3000);
     return () => clearTimeout(debounceRef.current);
   }, [data, user, isOnline]); // eslint-disable-line
+
+  // Show lock screen before anything else if PIN is set
+  if (locked) {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <LockScreen onUnlock={() => setLocked(false)} />
+      </>
+    );
+  }
 
   const TABS = [
     { id: "log",       label: "📝 Log Check" },
