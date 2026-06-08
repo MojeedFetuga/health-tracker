@@ -9,6 +9,13 @@ import {
 } from "./cloudBackup.js";
 import { PAYSTACK_PUBLIC_KEY, PLANS, IS_PAYSTACK_CONFIGURED } from "./paystackConfig.js";
 import { MEDICAL_DISCLAIMER, PRIVACY_POLICY, TERMS_OF_SERVICE, CONTACT_EMAIL } from "./policies.js";
+import { IS_DRIVE_CONFIGURED } from "./driveConfig.js";
+import {
+  isDriveConnected, getDriveLastBackup,
+  connectDrive, disconnectDrive,
+  backupToDrive, restoreFromDrive, getDriveBackupInfo,
+  SHARED_LAST_KEY,
+} from "./driveBackup.js";
 
 const STORAGE_KEY = "healthtracker_v1";
 
@@ -433,6 +440,28 @@ const STYLES = `
   .app-footer-links a { font-size: 12px; color: var(--slate); cursor: pointer; text-decoration: none; font-family: 'DM Mono', monospace; transition: color 0.15s; }
   .app-footer-links a:hover { color: var(--teal); }
   .app-footer-copy { width: 100%; font-size: 11px; color: var(--slate); font-family: 'DM Mono', monospace; opacity: 0.6; }
+
+  /* ── GOOGLE DRIVE SECTION ────────────────────────────────────────────────── */
+  .drive-connected-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--teal-light); border: 1.5px solid #99f6e4; border-radius: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .drive-icon { font-size: 28px; flex-shrink: 0; }
+  .drive-info { flex: 1; min-width: 140px; }
+  .drive-info .label { font-weight: 700; font-size: 14px; color: var(--teal-dark); }
+  .drive-info .sub { font-size: 12px; color: var(--teal-dark); opacity: 0.8; font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .drive-setup-guide { background: var(--slate-light); border: 1.5px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+  .drive-setup-guide h4 { font-family: 'DM Serif Display', serif; font-size: 15px; margin-bottom: 10px; }
+  .drive-setup-guide ol { padding-left: 18px; font-size: 12px; line-height: 2; }
+  .drive-setup-guide code { font-family: 'DM Mono', monospace; background: var(--border); padding: 1px 6px; border-radius: 4px; font-size: 11px; }
+
+  /* ── BACKUP REMINDER CARD ────────────────────────────────────────────────── */
+  .brem-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: var(--white); border: 1.5px solid var(--border); border-radius: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .brem-icon { font-size: 26px; flex-shrink: 0; }
+  .brem-info { flex: 1; min-width: 140px; }
+  .brem-label { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+  .brem-sub   { font-size: 12px; color: var(--slate); font-family: 'DM Mono', monospace; }
+  .freq-pill  { display: flex; gap: 4px; background: var(--slate-light); border-radius: 8px; padding: 3px; }
+  .freq-btn   { padding: 5px 12px; border: none; background: transparent; border-radius: 6px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700; color: var(--slate); cursor: pointer; transition: all 0.15s; }
+  .freq-btn.active { background: var(--ink); color: #fff; }
+  [data-theme="dark"] .freq-btn.active { background: var(--teal); }
 `;
 
 function useOnlineStatus() {
@@ -2123,6 +2152,68 @@ function ProGate({ title, description, onUpgrade, emoji }) {
   );
 }
 
+// ── BACKUP REMINDERS HOOK ────────────────────────────────────────────────────
+const BACKUP_REM_KEY = "mh_backup_rem_v1";
+const DEFAULT_BACKUP_REM = { enabled: false, frequency: "weekly", time: "20:00" };
+
+function useBackupReminders() {
+  const [config, _setConfig] = useState(() => {
+    try { const r = localStorage.getItem(BACKUP_REM_KEY); return r ? { ...DEFAULT_BACKUP_REM, ...JSON.parse(r) } : DEFAULT_BACKUP_REM; }
+    catch { return DEFAULT_BACKUP_REM; }
+  });
+  const setConfig = (next) => { _setConfig(next); localStorage.setItem(BACKUP_REM_KEY, JSON.stringify(next)); };
+
+  const [permission, setPermission] = useState(
+    () => (typeof Notification !== "undefined" ? Notification.permission : "unsupported")
+  );
+  const shownTodayRef = useRef({});
+
+  useEffect(() => {
+    const check = () => {
+      if (permission !== "granted") return;
+      const cfg = JSON.parse(localStorage.getItem(BACKUP_REM_KEY) || "{}");
+      if (!cfg.enabled) return;
+
+      const now  = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+      if ((cfg.time || "20:00") !== hhmm) return;
+
+      const today = now.toISOString().slice(0, 10);
+      if (shownTodayRef.current.backup === today) return;
+
+      // Check if backup is due
+      const lastTs  = localStorage.getItem(SHARED_LAST_KEY);
+      if (lastTs) {
+        const diffDays = (Date.now() - new Date(lastTs)) / 86_400_000;
+        const limit = cfg.frequency === "daily" ? 1 : cfg.frequency === "weekly" ? 7 : 30;
+        if (diffDays < limit) return;  // not due yet
+      }
+
+      shownTodayRef.current.backup = today;
+      try {
+        new Notification("💾 MetricHealth — Backup reminder", {
+          body: `Time for your ${cfg.frequency} health data backup. Keep your records safe.`,
+          icon: "/favicon.svg",
+          tag:  "metrichealth-backup",
+        });
+      } catch {}
+    };
+
+    check();
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, [permission]);
+
+  const requestPermission = async () => {
+    if (typeof Notification === "undefined") return;
+    const result = await Notification.requestPermission();
+    setPermission(result);
+    return result;
+  };
+
+  return { config, setConfig, permission, requestPermission };
+}
+
 // ── REMINDERS TAB ─────────────────────────────────────────────────────────────
 function RemindersTab({ data, isPro, onUpgrade }) {
   const { config, setConfig, permission, requestPermission } = useReminders();
@@ -2243,6 +2334,260 @@ function RemindersTab({ data, isPro, onUpgrade }) {
           <li>Use <strong>Send test</strong> to confirm notifications are working</li>
         </ul>
       </div>
+    </div>
+  );
+}
+
+// ── GOOGLE DRIVE BACKUP CARD ──────────────────────────────────────────────────
+function DriveBackupCard({ data, save, toast, isOnline, user }) {
+  const [connected,  setConnected]  = useState(isDriveConnected);
+  const [driveInfo,  setDriveInfo]  = useState(null);   // { modifiedTime, sizeKB }
+  const [loading,    setLoading]    = useState(null);   // "connect"|"backup"|"restore"|"info"
+  const [status,     setStatus]     = useState(null);   // { type, msg }
+
+  // Derive a stable UID/email for Drive key derivation
+  // Free users who haven't signed in with Firebase use Drive-only auth
+  const uid   = user?.uid   || "drive-only";
+  const email = user?.email || null;
+
+  // Load backup info when connected
+  useEffect(() => {
+    if (!connected || !email) return;
+    setLoading("info");
+    getDriveBackupInfo(email)
+      .then(setDriveInfo)
+      .catch(() => {})
+      .finally(() => setLoading(null));
+  }, [connected, email]);
+
+  const handleConnect = async () => {
+    if (!IS_DRIVE_CONFIGURED) {
+      setStatus({ type: "info", msg: "Google Drive Client ID not configured yet — see driveConfig.js setup guide below." });
+      return;
+    }
+    setLoading("connect");
+    setStatus(null);
+    try {
+      await connectDrive(email);
+      setConnected(true);
+      toast("Google Drive connected");
+    } catch (e) {
+      setStatus({ type: "error", msg: e.message });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleBackup = async () => {
+    if (!connected) return;
+    setLoading("backup"); setStatus(null);
+    try {
+      const ts = await backupToDrive(data, uid, email);
+      setDriveInfo(prev => ({ ...prev, modifiedTime: ts }));
+      toast("Drive backup complete");
+      setStatus({ type: "success", msg: "Backup saved to your Google Drive." });
+    } catch (e) {
+      setStatus({ type: "error", msg: "Drive backup failed: " + e.message });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!connected) return;
+    if (!confirm("Replace all local data with your Google Drive backup? This cannot be undone.")) return;
+    setLoading("restore"); setStatus(null);
+    try {
+      const result = await restoreFromDrive(uid, email);
+      if (!result) { setStatus({ type: "info", msg: "No backup found in your Google Drive yet." }); return; }
+      save(result.data);
+      toast("Data restored from Google Drive");
+      setStatus({ type: "success", msg: "Data restored successfully." });
+    } catch (e) {
+      setStatus({ type: "error", msg: "Restore failed: " + e.message });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleDisconnect = () => {
+    disconnectDrive();
+    setConnected(false);
+    setDriveInfo(null);
+    setStatus(null);
+    toast("Google Drive disconnected");
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        <span className="dot" />
+        <svg width="20" height="20" viewBox="0 0 87.3 78" style={{ marginRight: 4 }} aria-hidden="true">
+          <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066DA"/>
+          <path d="M43.65 25L29.9 1.4C28.55.5 27 0 25.35 0c-1.65 0-3.2.5-4.55 1.4L6.6 25h37.05z" fill="#00AC47"/>
+          <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H60.1l5.55 10.85 7.9 12.95z" fill="#EA4335"/>
+          <path d="M43.65 25L57.4 1.4C56.05.5 54.5 0 52.85 0H34.45c-1.65 0-3.2.5-4.55 1.4L43.65 25z" fill="#00832D"/>
+          <path d="M60.1 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.55 1.2h50.7c1.65 0 3.2-.4 4.55-1.2L60.1 53z" fill="#2684FC"/>
+          <path d="M59.8 26.5L46.05 3c-1.35-.9-2.9-1.4-4.55-1.4h-.2c-1.65 0-3.2.5-4.55 1.4L43.65 25 59.8 26.5z" fill="#00AC47"/>
+        </svg>
+        Google Drive Backup
+        <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "var(--teal-dark)", background: "var(--teal-light)", padding: "2px 8px", borderRadius: 20, marginLeft: 8 }}>
+          Free for everyone
+        </span>
+      </div>
+
+      <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 16, lineHeight: 1.6 }}>
+        Back up directly to <strong>your own Google Drive</strong> — completely private. Your data is encrypted before it leaves your device. The developer has zero access.
+      </p>
+
+      {/* Not configured — show setup guide */}
+      {!IS_DRIVE_CONFIGURED && (
+        <div className="drive-setup-guide">
+          <h4>⚙ One-time setup required</h4>
+          <ol>
+            <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{ color: "var(--teal)" }}>console.cloud.google.com</a> → select project <code>healthtracker-f784a</code></li>
+            <li>APIs &amp; Services → Library → search <strong>Google Drive API</strong> → Enable</li>
+            <li>Credentials → Create Credentials → <strong>OAuth 2.0 Client ID</strong> → Web application</li>
+            <li>Add Authorized JavaScript origins: <code>https://metrichealth.vercel.app</code></li>
+            <li>Copy the Client ID → paste in <code>src/driveConfig.js</code></li>
+          </ol>
+        </div>
+      )}
+
+      {/* Connected UI */}
+      {connected ? (
+        <>
+          <div className="drive-connected-row">
+            <div className="drive-icon">✅</div>
+            <div className="drive-info">
+              <div className="label">Google Drive connected</div>
+              <div className="sub">
+                {loading === "info" ? "Checking…"
+                  : driveInfo?.modifiedTime
+                  ? `Last backup: ${new Date(driveInfo.modifiedTime).toLocaleString("en-GB")}${driveInfo.sizeKB ? ` · ${driveInfo.sizeKB} KB` : ""}`
+                  : "No backup in Drive yet"}
+              </div>
+            </div>
+            <button className="btn btn-danger btn-sm" onClick={handleDisconnect}>Disconnect</button>
+          </div>
+
+          <div className="backup-grid">
+            <div className="backup-action-card">
+              <h4>☁ Backup to Drive</h4>
+              <p>Encrypt and save your current records to your Google Drive.</p>
+              <button className="btn btn-primary btn-full" onClick={handleBackup} disabled={!!loading || !isOnline}>
+                {loading === "backup" ? "Saving…" : isOnline ? "Backup Now" : "No connection"}
+              </button>
+            </div>
+            <div className="backup-action-card">
+              <h4>↓ Restore from Drive</h4>
+              <p>Replace local data with your Drive backup.</p>
+              <button className="btn btn-secondary btn-full" onClick={handleRestore} disabled={!!loading || !isOnline}>
+                {loading === "restore" ? "Restoring…" : isOnline ? "Restore" : "No connection"}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <button className="btn btn-secondary" onClick={handleConnect} disabled={loading === "connect" || !isOnline}>
+          <svg width="18" height="18" viewBox="0 0 87.3 78" style={{ marginRight: 6 }} aria-hidden="true"><path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066DA"/><path d="M43.65 25L29.9 1.4C28.55.5 27 0 25.35 0c-1.65 0-3.2.5-4.55 1.4L6.6 25h37.05z" fill="#00AC47"/><path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H60.1l5.55 10.85 7.9 12.95z" fill="#EA4335"/><path d="M43.65 25L57.4 1.4C56.05.5 54.5 0 52.85 0H34.45c-1.65 0-3.2.5-4.55 1.4L43.65 25z" fill="#00832D"/><path d="M60.1 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.55 1.2h50.7c1.65 0 3.2-.4 4.55-1.2L60.1 53z" fill="#2684FC"/></svg>
+          {loading === "connect" ? "Connecting…" : "Connect Google Drive"}
+        </button>
+      )}
+
+      {status && (
+        <div className={`msg-bar ${status.type}`} style={{ marginTop: 12 }}>
+          {status.type === "success" ? "✓" : status.type === "error" ? "✕" : "ℹ"} {status.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── BACKUP REMINDER CARD ──────────────────────────────────────────────────────
+function BackupReminderCard() {
+  const { config, setConfig, permission, requestPermission } = useBackupReminders();
+  const lastBackup = localStorage.getItem(SHARED_LAST_KEY);
+
+  const FREQS = [
+    { id: "daily",   label: "Daily"   },
+    { id: "weekly",  label: "Weekly"  },
+    { id: "monthly", label: "Monthly" },
+  ];
+
+  return (
+    <div className="card">
+      <div className="card-title"><span className="dot" />Backup Reminders</div>
+      <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 18, lineHeight: 1.6 }}>
+        Get a push notification reminding you to back up your data. Works with both Firebase and Google Drive backups.
+      </p>
+
+      {lastBackup && (
+        <div className="last-backup-row" style={{ marginBottom: 16 }}>
+          <span className="last-backup-dot" />
+          Last backup (any): <strong>{new Date(lastBackup).toLocaleString("en-GB")}</strong>
+        </div>
+      )}
+
+      <div className="brem-row">
+        <div className="brem-icon">💾</div>
+        <div className="brem-info">
+          <div className="brem-label">Backup reminder</div>
+          <div className="brem-sub">Notify me to back up my data</div>
+        </div>
+
+        {/* Frequency selector */}
+        {config.enabled && (
+          <div className="freq-pill">
+            {FREQS.map(f => (
+              <button
+                key={f.id}
+                className={`freq-btn${config.frequency === f.id ? " active" : ""}`}
+                onClick={() => setConfig({ ...config, frequency: f.id })}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Time picker */}
+        {config.enabled && (
+          <input
+            type="time"
+            className="reminder-time"
+            value={config.time}
+            onChange={e => setConfig({ ...config, time: e.target.value })}
+          />
+        )}
+
+        {/* Toggle */}
+        <label className="toggle" title={config.enabled ? "Disable" : "Enable"}>
+          <input
+            type="checkbox"
+            checked={config.enabled}
+            onChange={async e => {
+              if (e.target.checked && permission !== "granted") {
+                const p = await requestPermission();
+                if (p !== "granted") return;
+              }
+              setConfig({ ...config, enabled: e.target.checked });
+            }}
+          />
+          <span className="toggle-slider" />
+        </label>
+      </div>
+
+      {config.enabled && permission !== "granted" && (
+        <div className="msg-bar info" style={{ marginTop: 10 }}>
+          ℹ Enable browser notifications to receive backup reminders
+        </div>
+      )}
+      {config.enabled && permission === "granted" && (
+        <div className="msg-bar success" style={{ marginTop: 10 }}>
+          ✓ You'll be reminded to back up {config.frequency} at {config.time}
+        </div>
+      )}
     </div>
   );
 }
@@ -2397,6 +2742,8 @@ service cloud.firestore {
           </div>
         )}
         <PinCard toast={toast} />
+        <DriveBackupCard data={data} save={save} toast={toast} isOnline={isOnline} user={user} />
+        <BackupReminderCard />
       </div>
     );
   }
@@ -2470,6 +2817,8 @@ service cloud.firestore {
       )}
 
       <PinCard toast={toast} />
+      <DriveBackupCard data={data} save={save} toast={toast} isOnline={isOnline} user={user} />
+      <BackupReminderCard />
 
       {/* Data deletion — NDPR Right to Erasure */}
       <div className="card" style={{ borderColor: "var(--rose-light)" }}>
