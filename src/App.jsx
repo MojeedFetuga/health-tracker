@@ -400,20 +400,9 @@ const STYLES = `
   .pro-gate p { font-size: 13px; color: var(--slate); margin-bottom: 18px; line-height: 1.6; max-width: 360px; margin-left: auto; margin-right: auto; }
 
   /* Upgrade modal */
-  .upgrade-modal-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
-  @media (max-width: 440px) { .upgrade-modal-plans { grid-template-columns: 1fr; } }
-  .plan-card { border: 2px solid var(--border); border-radius: 14px; padding: 18px 16px; cursor: pointer; transition: all 0.18s; position: relative; }
-  .plan-card:hover { border-color: #f59e0b; }
-  .plan-card.selected { border-color: #f59e0b; background: rgba(245,158,11,0.06); }
-  .plan-card-badge { position: absolute; top: -10px; right: 12px; background: #d97706; color: #fff; font-size: 10px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: 0.05em; padding: 2px 10px; border-radius: 20px; }
-  .plan-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
-  .plan-price { font-family: 'DM Serif Display', serif; font-size: 26px; color: var(--teal); line-height: 1.1; }
-  .plan-period { font-size: 12px; color: var(--slate); font-family: 'DM Mono', monospace; margin-bottom: 10px; }
   .pro-features-list { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
   .pro-features-list li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
   .pro-features-list li span.check { color: var(--teal); font-weight: 700; font-size: 16px; flex-shrink: 0; }
-  .pro-features-list li span.lock  { color: var(--slate); font-size: 15px; flex-shrink: 0; }
-  [data-theme="dark"] .plan-card.selected { background: rgba(245,158,11,0.1); }
 `;
 
 function useOnlineStatus() {
@@ -759,8 +748,9 @@ function PersonsTab({ data, save, toast, isPro, onUpgrade }) {
       {/* Pro gate: only 1 person on free plan */}
       {data.persons.length >= 1 && !isPro ? (
         <ProGate
-          title="Add More Persons — Pro Feature"
-          description="The free plan includes 1 person. Upgrade to Pro to track unlimited family members."
+          emoji="👨‍👩‍👧‍👦"
+          title="You're tracking family too — that's what Pro is for"
+          description="The free plan covers you. Pro covers your whole family — mum, dad, spouse, children. One payment of ₦5,000. Your family's health records, forever."
           onUpgrade={onUpgrade}
         />
       ) : (
@@ -1439,14 +1429,50 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
         <div className="stat-box"><div className="stat-value">{data.checkTypes.length}</div><div className="stat-label">Check Types</div></div>
       </div>
 
+      {/* Free data export — available to all users */}
+      <div className="card">
+        <div className="card-title"><span className="dot" />Export Your Data</div>
+        <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 16, lineHeight: 1.6 }}>
+          Download all your health records as a JSON file. You own your data — keep a personal backup at any time, for free.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className="btn btn-secondary" onClick={() => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = "metrichealth_data.json"; a.click();
+            URL.revokeObjectURL(url);
+          }}>
+            ⬇ Download JSON backup
+          </button>
+          <button className="btn btn-secondary" onClick={() => {
+            const rows = [["Date","Person","Check Type","Value","Unit","Session","Notes"]];
+            data.records.forEach(r => {
+              const p  = data.persons.find(x => x.id === r.personId);
+              const ct = data.checkTypes.find(x => x.id === r.checkTypeId);
+              rows.push([r.date, p?.name||"", ct?.name||"", r.value, ct?.unit||"", r.session, r.notes||""]);
+            });
+            const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = "metrichealth_records.csv"; a.click();
+            URL.revokeObjectURL(url);
+          }}>
+            ⬇ Download CSV
+          </button>
+        </div>
+      </div>
+
       {/* Import from Excel */}
       <div className="card">
         <div className="card-title"><span className="dot" />Import from Excel</div>
 
         {!isPro ? (
           <ProGate
-            title="Import from Excel — Pro"
-            description="Bulk-import records from .xlsx files. Upgrade to Pro to use this feature."
+            emoji="📥"
+            title="Import from Excel — Pro Feature"
+            description="Bulk-import months of records from a spreadsheet in seconds. Upgrade to Pro to unlock Excel import."
             onUpgrade={onUpgrade}
           />
         ) : !importPreview ? (
@@ -1490,8 +1516,9 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
         <div className="card-title"><span className="dot" />Download Individual Reports</div>
         {!isPro ? (
           <ProGate
-            title="Export & Share Reports — Pro"
-            description="Download Excel files, print doctor reports, and share via WhatsApp or email. Upgrade to Pro."
+            emoji="🩺"
+            title="Doctor Reports & Sharing — Pro Feature"
+            description="Print a clean one-page report for your next clinic visit, or send readings directly to a doctor via WhatsApp or email. Upgrade to Pro."
             onUpgrade={onUpgrade}
           />
         ) : data.persons.length === 0 ? (
@@ -1896,9 +1923,8 @@ function loadPaystack() {
 
 // ── UPGRADE MODAL ─────────────────────────────────────────────────────────────
 function UpgradeModal({ user, onClose, toast, onProActivated }) {
-  const [selected, setSelected] = useState("yearly");
-  const [paying, setPaying]     = useState(false);
-  const plan = PLANS[selected];
+  const [paying, setPaying] = useState(false);
+  const plan = PLANS.lifetime;
 
   const pay = async () => {
     if (!IS_PAYSTACK_CONFIGURED) {
@@ -1918,15 +1944,15 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
         amount: plan.amount,
         currency: "NGN",
         ref: "MH-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
-        metadata: { uid: user.uid, plan: selected },
+        metadata: { uid: user.uid, plan: "lifetime" },
         onSuccess: async (res) => {
           try {
-            await setProStatus({ plan: selected, ref: res.reference });
+            await setProStatus({ plan: "lifetime", ref: res.reference });
             toast("🎉 Pro activated! Welcome to MetricHealth Pro");
             onProActivated?.();
             onClose();
           } catch (e) {
-            toast("Payment received but activation failed — please contact support with ref: " + res.reference);
+            toast("Payment received but activation failed — contact support with ref: " + res.reference);
           }
         },
         onCancel: () => { setPaying(false); },
@@ -1940,52 +1966,60 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }}>
-        <div className="modal-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 24 }}>⭐</span>
-          <span>Upgrade to <span style={{ color: "#d97706" }}>Pro</span></span>
+      <div className="modal" style={{ maxWidth: 500 }}>
+
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>👨‍👩‍👧‍👦</div>
+          <div className="modal-title" style={{ justifyContent: "center", marginBottom: 4 }}>
+            MetricHealth <span style={{ color: "#d97706" }}>Pro</span>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
+            For the cost of one clinic visit — protect your whole family's health records <strong>forever.</strong>
+          </p>
         </div>
 
+        {/* What Pro unlocks */}
         <ul className="pro-features-list">
-          <li><span className="check">✓</span> <strong>Unlimited persons</strong> — track the whole family</li>
-          <li><span className="check">✓</span> <strong>Cloud backup & real-time sync</strong> — data follows you</li>
-          <li><span className="check">✓</span> <strong>Excel export</strong> — download reports as .xlsx</li>
-          <li><span className="check">✓</span> <strong>Print reports</strong> — clean one-page doctor summary</li>
-          <li><span className="check">✓</span> <strong>Share via WhatsApp/email</strong> — send reports instantly</li>
-          <li><span className="check">✓</span> <strong>Push reminders</strong> — daily morning & evening alerts</li>
+          <li><span className="check">✓</span> <strong>Unlimited family members</strong> — mum, dad, spouse, children</li>
+          <li><span className="check">✓</span> <strong>Cloud backup & real-time sync</strong> — data safe even if phone is lost</li>
+          <li><span className="check">✓</span> <strong>Print doctor reports</strong> — clean one-page summary for clinic visits</li>
+          <li><span className="check">✓</span> <strong>Share via WhatsApp & email</strong> — send readings to any doctor</li>
+          <li><span className="check">✓</span> <strong>Excel import & export</strong> — full data in spreadsheet format</li>
+          <li><span className="check">✓</span> <strong>Daily push reminders</strong> — morning & evening alert for the family</li>
         </ul>
 
-        <div className="upgrade-modal-plans">
-          {Object.entries(PLANS).map(([key, p]) => (
-            <div
-              key={key}
-              className={`plan-card${selected === key ? " selected" : ""}`}
-              onClick={() => setSelected(key)}
-            >
-              {p.badge && <div className="plan-card-badge">{p.badge}</div>}
-              <div className="plan-name">{key === "monthly" ? "Monthly" : "Yearly"}</div>
-              <div className="plan-price">{p.label}</div>
-              <div className="plan-period">{p.period}</div>
-            </div>
-          ))}
+        {/* Price card */}
+        <div style={{
+          border: "2px solid #f59e0b", borderRadius: 14, padding: "18px 20px",
+          textAlign: "center", margin: "16px 0",
+          background: "linear-gradient(135deg,rgba(245,158,11,0.07),rgba(217,119,6,0.04))",
+          position: "relative",
+        }}>
+          <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "#d97706", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono',monospace", padding: "2px 14px", borderRadius: 20, letterSpacing: "0.06em" }}>
+            LIFETIME ACCESS
+          </div>
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 38, color: "var(--teal)", lineHeight: 1.1 }}>₦5,000</div>
+          <div style={{ fontSize: 12, color: "var(--slate)", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+            pay once · use forever · no subscriptions
+          </div>
         </div>
 
         {!user && (
           <div className="msg-bar info" style={{ marginBottom: 12 }}>
-            ℹ Sign in with Google (Backup tab) to activate Pro after payment
+            ℹ Sign in with Google (Backup tab) first — your Pro status will be saved to your account
           </div>
         )}
-
         {!IS_PAYSTACK_CONFIGURED && (
           <div className="msg-bar info" style={{ marginBottom: 12 }}>
-            ℹ Demo mode — add your Paystack public key to enable payments
+            ℹ Demo mode — add your Paystack public key in paystackConfig.js to enable payments
           </div>
         )}
 
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={onClose}>Maybe later</button>
-          <button className="btn btn-gold btn-full" onClick={pay} disabled={paying} style={{ flex: 2 }}>
-            {paying ? "Opening payment…" : `⭐ Unlock Pro — ${plan.label}${plan.period}`}
+          <button className="btn btn-gold" onClick={pay} disabled={paying} style={{ flex: 2, justifyContent: "center" }}>
+            {paying ? "Opening payment…" : "⭐ Unlock Pro — ₦5,000"}
           </button>
         </div>
       </div>
@@ -1994,14 +2028,14 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
 }
 
 // ── PRO GATE ──────────────────────────────────────────────────────────────────
-function ProGate({ title, description, onUpgrade }) {
+function ProGate({ title, description, onUpgrade, emoji }) {
   return (
     <div className="pro-gate">
-      <div className="pro-gate-icon">⭐</div>
+      <div className="pro-gate-icon">{emoji || "⭐"}</div>
       <h3>{title || "Pro Feature"}</h3>
       <p>{description || "Upgrade to MetricHealth Pro to unlock this feature."}</p>
       <button className="btn btn-gold" onClick={onUpgrade}>
-        Upgrade to Pro
+        ⭐ Unlock Pro — ₦5,000 one-time
       </button>
     </div>
   );
@@ -2015,8 +2049,9 @@ function RemindersTab({ data, isPro, onUpgrade }) {
   if (!isPro) {
     return (
       <ProGate
-        title="Push Reminders — Pro Feature"
-        description="Get daily morning and evening alerts to log your readings. Never miss a check-up again. Upgrade to Pro to enable reminders."
+        emoji="🔔"
+        title="Daily Push Reminders — Pro Feature"
+        description="Set morning and evening alerts so you never forget to log a reading. Works for you and every family member you track. Upgrade to Pro to enable reminders."
         onUpgrade={onUpgrade}
       />
     );
@@ -2256,8 +2291,9 @@ service cloud.firestore {
       <div>
         {!isPro ? (
           <ProGate
+            emoji="☁"
             title="Cloud Backup — Pro Feature"
-            description="Back up your records to the cloud, sync across devices in real-time, and restore on any phone. Upgrade to Pro to enable cloud backup."
+            description="If your phone is lost, stolen, or broken — your family's health records are gone forever. Pro keeps everything safe in the cloud and syncs across all your devices automatically."
             onUpgrade={onUpgrade}
           />
         ) : (
@@ -2288,8 +2324,9 @@ service cloud.firestore {
     <div>
       {!isPro && (
         <ProGate
+          emoji="☁"
           title="Cloud Backup — Pro Feature"
-          description="You're signed in, but cloud backup requires Pro. Upgrade to sync your data across devices."
+          description="You're signed in. Upgrade to Pro to enable cloud backup and real-time sync across all your devices."
           onUpgrade={onUpgrade}
         />
       )}
@@ -2473,7 +2510,7 @@ export default function App() {
             </button>
             {isPro
               ? <span className="pro-badge">⭐ Pro</span>
-              : <button className="btn btn-gold btn-sm" onClick={onUpgrade} style={{ fontSize: 12, padding: "5px 14px" }}>⭐ Upgrade</button>
+              : <button className="btn btn-gold btn-sm" onClick={onUpgrade} style={{ fontSize: 12, padding: "5px 14px" }}>⭐ Pro — ₦5,000</button>
             }
             {user && syncLabel && (
               <span style={{

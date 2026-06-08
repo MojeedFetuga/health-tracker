@@ -4,20 +4,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 export const PAYSTACK_PUBLIC_KEY = ""; // ← paste your key here
 
+// Single one-time lifetime plan
 export const PLANS = {
-  monthly: {
-    amount:  150000,      // kobo (₦1,500)
-    label:   "₦1,500",
-    period:  "/month",
-    months:  1,
-    badge:   null,
-  },
-  yearly: {
-    amount:  1200000,     // kobo (₦12,000)
-    label:   "₦12,000",
-    period:  "/year",
-    months:  12,
-    badge:   "Save 33%",
+  lifetime: {
+    amount:  500000,           // kobo (₦5,000)
+    label:   "₦5,000",
+    period:  "one-time · forever",
+    badge:   "Lifetime Access",
   },
 };
 
