@@ -11,7 +11,7 @@
 import { deriveKey, encryptPayload, decryptPayload } from "./crypto.js";
 import { GOOGLE_DRIVE_CLIENT_ID, IS_DRIVE_CONFIGURED } from "./driveConfig.js";
 
-const BACKUP_FILENAME = "metrichealth_backup.json";
+const BACKUP_FILENAME = "dailyvitals_backup.json";
 const DRIVE_CONN_KEY  = "mh_drive_v1";       // localStorage: connected flag
 const DRIVE_LAST_KEY  = "mh_drive_last_v1";  // localStorage: last Drive backup ts
 export const SHARED_LAST_KEY = "mh_last_any_backup"; // shared with Firebase
@@ -138,7 +138,7 @@ export async function backupToDrive(data, uid, email) {
   const metadata = {
     name:        BACKUP_FILENAME,
     mimeType:    "application/json",
-    description: `MetricHealth encrypted backup — ${data.persons.length} persons · ${data.records.length} records`,
+    description: `DailyVitals encrypted backup — ${data.persons.length} persons · ${data.records.length} records`,
   };
 
   const form = new FormData();

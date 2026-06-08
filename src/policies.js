@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// MetricHealth — Legal Policy Documents
+// DailyVitals — Legal Policy Documents
 // Last updated: June 2026
 // Developer: Palladium Innovations  |  https://www.palladiuminnovations.com.ng/
 // Contact: palladiuminnovations@gmail.com
@@ -7,7 +7,7 @@
 
 export const POLICY_DATE      = "June 2026";
 export const CONTACT_EMAIL    = "palladiuminnovations@gmail.com";
-export const APP_URL          = "https://metrichealth.vercel.app";
+export const APP_URL          = "https://dailyvitals.app";
 export const DEVELOPER_NAME   = "Palladium Innovations";
 export const DEVELOPER_URL    = "https://www.palladiuminnovations.com.ng/";
 
@@ -17,17 +17,17 @@ export const MEDICAL_DISCLAIMER = {
   sections: [
     {
       heading: "Not a Medical Device",
-      body: `MetricHealth is a personal health-tracking tool designed to help individuals log and monitor their own health readings. It is NOT a medical device, NOT a diagnostic tool, and does NOT provide medical advice.`,
+      body: `DailyVitals is a personal health-tracking tool designed to help individuals log and monitor their own health readings. It is NOT a medical device, NOT a diagnostic tool, and does NOT provide medical advice.`,
     },
     {
       heading: "Not a Substitute for Professional Medical Care",
-      body: `The information recorded and displayed in MetricHealth — including health readings, range indicators (Normal, Elevated, High, Low), and any alerts — is for personal reference only. It does not constitute a medical diagnosis, clinical assessment, or professional health recommendation.
+      body: `The information recorded and displayed in DailyVitals — including health readings, range indicators (Normal, Elevated, High, Low), and any alerts — is for personal reference only. It does not constitute a medical diagnosis, clinical assessment, or professional health recommendation.
 
 Always consult a qualified and licensed medical professional before making any health-related decisions. Never delay seeking professional medical advice based on anything you read or see in this application.`,
     },
     {
       heading: "Range Indicators Are General Guidelines Only",
-      body: `The colour-coded range alerts displayed in MetricHealth (e.g. "High", "Elevated", "Normal") are based on widely published general reference ranges for adults. These ranges:
+      body: `The colour-coded range alerts displayed in DailyVitals (e.g. "High", "Elevated", "Normal") are based on widely published general reference ranges for adults. These ranges:
 
 • Do not account for your individual medical history, age, medications, or conditions
 • May not apply to children, pregnant women, or people with specific diagnoses
@@ -38,11 +38,11 @@ If any reading triggers a "Crisis" or "High" alert, seek immediate professional 
     },
     {
       heading: "Emergency Situations",
-      body: `MetricHealth is not designed for emergency use. If you or someone else is experiencing a medical emergency, call the emergency services in your country immediately (Nigeria: 199 or 112). Do not rely on this application in an emergency.`,
+      body: `DailyVitals is not designed for emergency use. If you or someone else is experiencing a medical emergency, call the emergency services in your country immediately (Nigeria: 199 or 112). Do not rely on this application in an emergency.`,
     },
     {
       heading: "No Liability for Health Outcomes",
-      body: `The developer of MetricHealth (Palladium Innovations) accepts no liability whatsoever for any health outcome, injury, illness, loss, or damage arising from the use of this application or from reliance on any information displayed within it. Your use of this application is entirely at your own risk.`,
+      body: `The developer of DailyVitals (Palladium Innovations) accepts no liability whatsoever for any health outcome, injury, illness, loss, or damage arising from the use of this application or from reliance on any information displayed within it. Your use of this application is entirely at your own risk.`,
     },
   ],
 };
@@ -53,13 +53,13 @@ export const PRIVACY_POLICY = {
   sections: [
     {
       heading: "Overview",
-      body: `MetricHealth is built on a local-first, privacy-respecting architecture. Your health data is stored on your own device by default and is never shared with third parties, advertisers, or anyone else.
+      body: `DailyVitals is built on a local-first, privacy-respecting architecture. Your health data is stored on your own device by default and is never shared with third parties, advertisers, or anyone else.
 
 This policy explains what data we collect, how it is stored, and your rights under the Nigeria Data Protection Regulation (NDPR) 2019.`,
     },
     {
       heading: "Data We Collect",
-      body: `MetricHealth collects only what you explicitly enter:
+      body: `DailyVitals collects only what you explicitly enter:
 
 • Health readings you log (blood pressure, temperature, blood sugar, etc.)
 • Names and ages of persons you track
@@ -87,10 +87,10 @@ Authentication only: We use Google Sign-In (Firebase Authentication) to identify
     },
     {
       heading: "Third-Party Services",
-      body: `MetricHealth uses the following third-party services:
+      body: `DailyVitals uses the following third-party services:
 
 • Google Firebase (Authentication + Firestore database) — used for sign-in and encrypted cloud backup. Firebase is operated by Google LLC and is subject to Google's Privacy Policy.
-• Paystack — used to process Pro subscription payments. Paystack receives your email address and payment information. MetricHealth does not store your card details. Paystack is subject to its own Privacy Policy.
+• Paystack — used to process Pro subscription payments. Paystack receives your email address and payment information. DailyVitals does not store your card details. Paystack is subject to its own Privacy Policy.
 • Vercel — used to host and serve the application. Vercel may log standard HTTP request metadata (IP address, user agent) for security purposes.
 
 We do not use advertising networks, analytics trackers, or any other third-party data services.`,
@@ -115,11 +115,11 @@ If you have not signed in for 24 months, we may delete your cloud backup to comp
     },
     {
       heading: "Children",
-      body: `MetricHealth is not intended for use by children under the age of 13 without parental supervision. We do not knowingly collect data from children. If you believe a child has used this app without appropriate supervision, please contact us.`,
+      body: `DailyVitals is not intended for use by children under the age of 13 without parental supervision. We do not knowingly collect data from children. If you believe a child has used this app without appropriate supervision, please contact us.`,
     },
     {
       heading: "Changes to This Policy",
-      body: `We may update this Privacy Policy from time to time. When we do, we will update the "Last updated" date at the top of this document and notify users through the application. Continued use of MetricHealth after changes constitutes acceptance of the revised policy.`,
+      body: `We may update this Privacy Policy from time to time. When we do, we will update the "Last updated" date at the top of this document and notify users through the application. Continued use of DailyVitals after changes constitutes acceptance of the revised policy.`,
     },
     {
       heading: "Contact",
@@ -134,17 +134,17 @@ export const TERMS_OF_SERVICE = {
   sections: [
     {
       heading: "Acceptance of Terms",
-      body: `By accessing or using MetricHealth ("the App"), you agree to be bound by these Terms of Service. If you do not agree, do not use the App.
+      body: `By accessing or using DailyVitals ("the App"), you agree to be bound by these Terms of Service. If you do not agree, do not use the App.
 
 These Terms are governed by the laws of the Federal Republic of Nigeria.`,
     },
     {
       heading: "Description of Service",
-      body: `MetricHealth is a personal health-tracking Progressive Web Application (PWA) that allows individuals to log, store, and review personal health readings. The App is developed and maintained by Palladium Innovations (${DEVELOPER_URL}) and is not affiliated with any healthcare institution, hospital, or government health authority.`,
+      body: `DailyVitals is a personal health-tracking Progressive Web Application (PWA) that allows individuals to log, store, and review personal health readings. The App is developed and maintained by Palladium Innovations (${DEVELOPER_URL}) and is not affiliated with any healthcare institution, hospital, or government health authority.`,
     },
     {
       heading: "Not a Medical Service",
-      body: `MetricHealth is a data-logging tool only. It is expressly not:
+      body: `DailyVitals is a data-logging tool only. It is expressly not:
 
 • A medical device as defined by NAFDAC or any regulatory body
 • A clinical decision-support system
@@ -155,7 +155,7 @@ Please read the Medical Disclaimer in full before using the App.`,
     },
     {
       heading: "Free and Pro Plans",
-      body: `MetricHealth is available in two tiers:
+      body: `DailyVitals is available in two tiers:
 
 FREE PLAN: Available to all users at no cost. Includes personal health tracking for one individual, records, charts, range indicators, dark mode, and data export (JSON/CSV).
 
@@ -196,7 +196,7 @@ In the event of discontinuation of cloud services, you will be given at least 30
     },
     {
       heading: "Intellectual Property",
-      body: `MetricHealth, its design, code, and content are the intellectual property of Palladium Innovations. You may not reproduce, distribute, or create derivative works without written permission.`,
+      body: `DailyVitals, its design, code, and content are the intellectual property of Palladium Innovations. You may not reproduce, distribute, or create derivative works without written permission.`,
     },
     {
       heading: "Changes to Terms",

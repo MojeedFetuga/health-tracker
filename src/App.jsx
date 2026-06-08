@@ -1049,7 +1049,7 @@ function AdminDashboard() {
 const ONBOARD_STEPS = [
   {
     icon: "🏥",
-    title: "Welcome to MetricHealth",
+    title: "Welcome to DailyVitals",
     body: (
       <>
         Track <strong>blood pressure, glucose, weight, heart rate</strong>, and more — all in one place.
@@ -1126,7 +1126,7 @@ function OnboardingModal({ onClose }) {
             <button className="btn-back" onClick={() => setStep(s => s - 1)}>← Back</button>
           )}
           <button className="btn-next" onClick={() => isLast ? onClose() : setStep(s => s + 1)}>
-            {isLast ? "Start using MetricHealth →" : "Next →"}
+            {isLast ? "Start using DailyVitals →" : "Next →"}
           </button>
         </div>
 
@@ -1443,7 +1443,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
       .sort((a, b) => b.date.localeCompare(a.date));
     const generated = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
 
-    let t = `📊 *MetricHealth Report — ${person.name}*\n`;
+    let t = `📊 *DailyVitals Report — ${person.name}*\n`;
     if (person.age) t += `Age: ${person.age}\n`;
     t += `Generated: ${generated}\n`;
     t += `Total records: ${recs.length}\n\n`;
@@ -1460,7 +1460,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
       if (ctRecs.length > 6) t += `  … and ${ctRecs.length - 6} more\n`;
       t += "\n";
     }
-    t += `📱 Track your health at metrichealth.vercel.app`;
+    t += `📱 Track your health at dailyvitals.app`;
     return t;
   };
 
@@ -1502,15 +1502,15 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
     reader.onload = (evt) => {
       try {
         const wb = XLSX.read(evt.target.result, { type: "array" });
-        // Support both MetricHealth exports and plain spreadsheets
+        // Support both DailyVitals exports and plain spreadsheets
         const sheetName = wb.SheetNames.includes("All Records") ? "All Records" : wb.SheetNames[0];
         const sheet = wb.Sheets[sheetName];
         if (!sheet) throw new Error("No sheet found in the file.");
 
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
-        // Detect MetricHealth export: Row 0 = "MetricHealth Report"
-        const isMetricExport = String(rows[0]?.[0] || "").startsWith("MetricHealth");
+        // Detect DailyVitals export: Row 0 = "DailyVitals Report"
+        const isMetricExport = String(rows[0]?.[0] || "").startsWith("DailyVitals");
         let personName = null;
         if (isMetricExport) {
           const pRow = String(rows[1]?.[0] || "");
@@ -1614,7 +1614,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
     if (!person) return;
     const personRecords = data.records.filter(r => r.personId === personId).sort((a, b) => a.date.localeCompare(b.date));
     const wb = XLSX.utils.book_new();
-    const summaryRows = [["MetricHealth Report"], [`Person: ${person.name}`], [`Age: ${person.age || "N/A"}`], [`Notes: ${person.notes || "N/A"}`], [`Generated: ${new Date().toLocaleString()}`], [], ["Date", "Check Type", "Value", "Unit", "Session", "Notes"]];
+    const summaryRows = [["DailyVitals Report"], [`Person: ${person.name}`], [`Age: ${person.age || "N/A"}`], [`Notes: ${person.notes || "N/A"}`], [`Generated: ${new Date().toLocaleString()}`], [], ["Date", "Check Type", "Value", "Unit", "Session", "Notes"]];
     personRecords.forEach(r => {
       const ct = getCheck(r.checkTypeId);
       summaryRows.push([r.date, ct?.name || "Unknown", r.value, ct?.unit || "", r.session, r.notes]);
@@ -1631,7 +1631,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
       sheet["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 24 }];
       XLSX.utils.book_append_sheet(wb, sheet, ct.name.slice(0, 31));
     });
-    XLSX.writeFile(wb, `${person.name.replace(/\s+/g, "_")}_MetricHealth.xlsx`);
+    XLSX.writeFile(wb, `${person.name.replace(/\s+/g, "_")}_DailyVitals.xlsx`);
     toast(`Report downloaded for ${person.name}`);
   };
 
@@ -1691,7 +1691,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>MetricHealth — ${person.name}</title>
+  <title>DailyVitals — ${person.name}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
@@ -1737,7 +1737,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
 <body>
   <div class="header">
     <div>
-      <div class="brand">Metric<span>Health</span></div>
+      <div class="brand">Daily<span>Vitals</span></div>
       <div class="brand-sub">Patient Health Report</div>
     </div>
     <div class="meta">
@@ -1756,7 +1756,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
   ${tableRows}
 
   <div class="footer">
-    <span>MetricHealth · metrichealth.vercel.app</span>
+    <span>DailyVitals · dailyvitals.app</span>
     <span>For informational purposes only. Consult a qualified medical professional for diagnosis and treatment.</span>
   </div>
 
@@ -1805,7 +1805,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
                   WhatsApp
                 </a>
                 <a
-                  href={`mailto:?subject=MetricHealth Report — ${encodeURIComponent(person?.name || "")}&body=${encodedText}`}
+                  href={`mailto:?subject=DailyVitals Report — ${encodeURIComponent(person?.name || "")}&body=${encodedText}`}
                   className="btn btn-secondary"
                   style={{ textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
                 >
@@ -1815,7 +1815,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
                   <button
                     className="btn btn-secondary"
                     style={{ gridColumn: "1 / -1" }}
-                    onClick={() => navigator.share({ title: `MetricHealth — ${person?.name}`, text: shareState.text }).catch(() => {})}
+                    onClick={() => navigator.share({ title: `DailyVitals — ${person?.name}`, text: shareState.text }).catch(() => {})}
                   >
                     🌐 Share via…
                   </button>
@@ -1905,7 +1905,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = url; a.download = "metrichealth_data.json"; a.click();
+            a.href = url; a.download = "dailyvitals_data.json"; a.click();
             URL.revokeObjectURL(url);
           }}>
             ⬇ Download JSON backup
@@ -1921,7 +1921,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
             const blob = new Blob([csv], { type: "text/csv" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = url; a.download = "metrichealth_records.csv"; a.click();
+            a.href = url; a.download = "dailyvitals_records.csv"; a.click();
             URL.revokeObjectURL(url);
           }}>
             ⬇ Download CSV
@@ -1943,7 +1943,7 @@ function RecordsTab({ data, save, toast, isPro, onUpgrade }) {
         ) : !importPreview ? (
           <>
             <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 16, lineHeight: 1.6 }}>
-              Upload a MetricHealth Excel export (or any <code style={{ fontFamily:"'DM Mono',monospace", fontSize:11, background:"var(--slate-light)", padding:"1px 5px", borderRadius:4 }}>.xlsx</code> file with columns: <strong>Date, Check Type, Value, Unit, Session, Notes</strong>). Duplicates are skipped automatically.
+              Upload a DailyVitals Excel export (or any <code style={{ fontFamily:"'DM Mono',monospace", fontSize:11, background:"var(--slate-light)", padding:"1px 5px", borderRadius:4 }}>.xlsx</code> file with columns: <strong>Date, Check Type, Value, Unit, Session, Notes</strong>). Duplicates are skipped automatically.
             </p>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={handleImportFile} />
             <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
@@ -2329,7 +2329,7 @@ function useReminders() {
         if (shownTodayRef.current[key] === today) continue;
         shownTodayRef.current[key] = today;
         try {
-          new Notification(`${icon} MetricHealth — ${label} check`, {
+          new Notification(`${icon} DailyVitals — ${label} check`, {
             body: `Time to log your ${label.toLowerCase()} health readings!`,
             icon: "/favicon.svg",
             tag:  `metrichealth-${key}`,
@@ -2407,7 +2407,7 @@ function InstallBanner({ isIOS, onInstall, onDismiss }) {
     <div className="install-banner">
       <div className="install-banner-icon">📲</div>
       <div className="install-banner-text">
-        <strong>Install MetricHealth on your device</strong>
+        <strong>Install DailyVitals on your device</strong>
         {isIOS ? (
           <span className="ios-install-tip">
             Tap the <strong>Share</strong> button (⎙) in Safari, then choose <strong>"Add to Home Screen"</strong>
@@ -2488,7 +2488,7 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
         onSuccess: async (res) => {
           try {
             await setProStatus({ plan: "lifetime", ref: res.reference });
-            toast("🎉 Pro activated! Welcome to MetricHealth Pro");
+            toast("🎉 Pro activated! Welcome to DailyVitals Pro");
             onProActivated?.();
             onClose();
           } catch (e) {
@@ -2512,7 +2512,7 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>👨‍👩‍👧‍👦</div>
           <div className="modal-title" style={{ justifyContent: "center", marginBottom: 4 }}>
-            MetricHealth <span style={{ color: "#d97706" }}>Pro</span>
+            DailyVitals <span style={{ color: "#d97706" }}>Pro</span>
           </div>
           <p style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
             For the cost of one clinic visit — protect your whole family's health records <strong>forever.</strong>
@@ -2597,7 +2597,7 @@ function ProGate({ title, description, onUpgrade, emoji }) {
     <div className="pro-gate">
       <div className="pro-gate-icon">{emoji || "⭐"}</div>
       <h3>{title || "Pro Feature"}</h3>
-      <p>{description || "Upgrade to MetricHealth Pro to unlock this feature."}</p>
+      <p>{description || "Upgrade to DailyVitals Pro to unlock this feature."}</p>
       <button className="btn btn-gold" onClick={onUpgrade}>
         ⭐ Unlock Pro — ₦5,000 one-time
       </button>
@@ -2644,7 +2644,7 @@ function useBackupReminders() {
 
       shownTodayRef.current.backup = today;
       try {
-        new Notification("💾 MetricHealth — Backup reminder", {
+        new Notification("💾 DailyVitals — Backup reminder", {
           body: `Time for your ${cfg.frequency} health data backup. Keep your records safe.`,
           icon: "/favicon.svg",
           tag:  "metrichealth-backup",
@@ -2688,7 +2688,7 @@ function RemindersTab({ data, isPro, onUpgrade }) {
 
   const sendTest = () => {
     if (permission !== "granted") return;
-    new Notification("🔔 MetricHealth — Test reminder", {
+    new Notification("🔔 DailyVitals — Test reminder", {
       body: "Reminders are working! You'll see alerts like this at your chosen times.",
       icon: "/favicon.svg",
       tag:  "metrichealth-test",
@@ -2715,7 +2715,7 @@ function RemindersTab({ data, isPro, onUpgrade }) {
       <div className="card">
         <div className="card-title"><span className="dot" />Push Reminders</div>
         <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 20, lineHeight: 1.6 }}>
-          Set daily alerts so you never forget to log a reading. Notifications appear even when MetricHealth is in the background, as long as your browser tab is open.
+          Set daily alerts so you never forget to log a reading. Notifications appear even when DailyVitals is in the background, as long as your browser tab is open.
         </p>
 
         {/* Permission status */}
@@ -2901,7 +2901,7 @@ function DriveBackupCard({ data, save, toast, isOnline, user }) {
             <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{ color: "var(--teal)" }}>console.cloud.google.com</a> → select project <code>healthtracker-f784a</code></li>
             <li>APIs &amp; Services → Library → search <strong>Google Drive API</strong> → Enable</li>
             <li>Credentials → Create Credentials → <strong>OAuth 2.0 Client ID</strong> → Web application</li>
-            <li>Add Authorized JavaScript origins: <code>https://metrichealth.vercel.app</code></li>
+            <li>Add Authorized JavaScript origins: <code>https://dailyvitals.app</code></li>
             <li>Copy the Client ID → paste in <code>src/driveConfig.js</code></li>
           </ol>
         </div>
@@ -3287,7 +3287,7 @@ service cloud.firestore {
           className="btn btn-danger"
           disabled={!!opLoading || !isOnline}
           onClick={async () => {
-            if (!confirm("Permanently delete all your cloud data (backup + Pro status) from MetricHealth servers?\n\nThis cannot be undone. Your data on this device will not be affected.")) return;
+            if (!confirm("Permanently delete all your cloud data (backup + Pro status) from DailyVitals servers?\n\nThis cannot be undone. Your data on this device will not be affected.")) return;
             setOpLoading("delete");
             try {
               await deleteAllUserData();
@@ -3474,8 +3474,8 @@ export default function App() {
       <div className="app">
         <div className="header">
           <div>
-            <div className="header-title">Metric<span>Health</span></div>
-            <div className="header-sub">Daily health metrics · {data.persons.length} persons · {data.records.length} records</div>
+            <div className="header-title">Daily<span>Vitals</span></div>
+            <div className="header-sub">Daily health vitals · {data.persons.length} persons · {data.records.length} records</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button className="dark-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
@@ -3486,7 +3486,7 @@ export default function App() {
               <button
                 onClick={() => setShowInstallBanner(true)}
                 style={{ background: "none", border: "1.5px solid var(--teal)", color: "var(--teal)", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontFamily: "'DM Mono',monospace", cursor: "pointer", fontWeight: 600 }}
-                title="Install MetricHealth on your device"
+                title="Install DailyVitals on your device"
               >
                 📲 Install
               </button>
@@ -3544,7 +3544,7 @@ export default function App() {
             <a href={`mailto:${CONTACT_EMAIL}`}>✉ Contact</a>
           </div>
           <div className="app-footer-copy">
-            © {new Date().getFullYear()} <a href={DEVELOPER_URL} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{DEVELOPER_NAME}</a> · MetricHealth · Not a medical device · Data encrypted end-to-end
+            © {new Date().getFullYear()} <a href={DEVELOPER_URL} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{DEVELOPER_NAME}</a> · DailyVitals · Not a medical device · Data encrypted end-to-end
           </div>
         </footer>
       </div>
@@ -3581,7 +3581,7 @@ export default function App() {
       {!consentDone && (
         <div className={`consent-banner${showInstallBanner && !pwaInstalled ? " with-install" : ""}`}>
           <p>
-            MetricHealth is <strong>not a medical device</strong> and does not provide medical advice.
+            DailyVitals is <strong>not a medical device</strong> and does not provide medical advice.
             By using this app you agree to our{" "}
             <a onClick={() => setPolicyOpen("medical")}>Medical Disclaimer</a>,{" "}
             <a onClick={() => setPolicyOpen("privacy")}>Privacy Policy</a>, and{" "}

@@ -8,7 +8,7 @@
 // 4. APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID
 //    • Application type: Web application
 //    • Authorized JavaScript origins:
-//        https://metrichealth.vercel.app
+//        https://dailyvitals.app
 //        http://localhost:5173   (for local development)
 // 5. Copy the Client ID (looks like: 123456789-abc.apps.googleusercontent.com)
 // 6. Paste it below

@@ -20,9 +20,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'MetricHealth',
-        short_name: 'MetricHealth',
-        description: 'Track your daily health metrics — works offline, backs up to the cloud.',
+        name: 'DailyVitals',
+        short_name: 'DailyVitals',
+        description: 'Track your daily health vitals — blood pressure, glucose, weight and more. Works offline, backs up to the cloud.',
         theme_color: '#0d9488',
         background_color: '#f5f0e8',
         display: 'standalone',
