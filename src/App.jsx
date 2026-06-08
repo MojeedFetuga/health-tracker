@@ -852,7 +852,7 @@ function PoliciesModal({ initialTab = "medical", onClose }) {
 }
 
 // ── Admin Dashboard ───────────────────────────────────────────────────────────
-const ADMIN_EMAIL = "mojeedfetuga62@gmail.com";
+const ADMIN_EMAIL = "palladiuminnovations@gmail.com";
 const FIRESTORE_RULES = `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {

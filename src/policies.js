@@ -2,11 +2,11 @@
 // MetricHealth — Legal Policy Documents
 // Last updated: June 2026
 // Developer: Palladium Innovations  |  https://www.palladiuminnovations.com.ng/
-// Contact: mojeedfetuga62@gmail.com
+// Contact: palladiuminnovations@gmail.com
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const POLICY_DATE      = "June 2026";
-export const CONTACT_EMAIL    = "mojeedfetuga62@gmail.com";
+export const CONTACT_EMAIL    = "palladiuminnovations@gmail.com";
 export const APP_URL          = "https://metrichealth.vercel.app";
 export const DEVELOPER_NAME   = "Palladium Innovations";
 export const DEVELOPER_URL    = "https://www.palladiuminnovations.com.ng/";
