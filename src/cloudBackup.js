@@ -6,6 +6,7 @@ import {
 } from "firebase/auth";
 import {
   getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot,
+  collection, query, where, getDocs,
 } from "firebase/firestore";
 import { firebaseConfig, IS_CONFIGURED } from "./firebaseConfig.js";
 import { deriveKey, encryptPayload, decryptPayload } from "./crypto.js";
@@ -122,10 +123,24 @@ export async function setProStatus({ plan, ref }) {
   // Lifetime plans never expire; set expiresAt to year 9999
   const expiresAt = plan === "lifetime" ? "9999-12-31T23:59:59.000Z" : null;
 
-  const data = { pro: true, plan, ref, paidAt: new Date().toISOString(), expiresAt };
+  const data = {
+    pro: true, plan, ref,
+    paidAt: new Date().toISOString(),
+    expiresAt,
+    email:       user.email,
+    displayName: user.displayName || "",
+  };
   await setDoc(doc(db, "users", user.uid), data, { merge: true });
   localStorage.setItem(PRO_CACHE, JSON.stringify(data));
   return data;
+}
+
+// ── ADMIN ─────────────────────────────────────────────────────────────────────
+/** Fetch all Pro users. Requires admin Firestore rules (see AdminDashboard). */
+export async function getProUsers() {
+  const { db } = getServices();
+  const snap = await getDocs(query(collection(db, "users"), where("pro", "==", true)));
+  return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
 }
 
 /** Subscribe to pro status from Firestore. Calls onData(true|false) on change. */

@@ -6,6 +6,7 @@ import {
   listenAuthState, signInWithGoogle, signOut,
   backupToCloud, restoreFromCloud, subscribeToCloud,
   setProStatus, subscribeProStatus, deleteAllUserData,
+  getProUsers,
 } from "./cloudBackup.js";
 import { PAYSTACK_PUBLIC_KEY, PLANS, IS_PAYSTACK_CONFIGURED } from "./paystackConfig.js";
 import { MEDICAL_DISCLAIMER, PRIVACY_POLICY, TERMS_OF_SERVICE, CONTACT_EMAIL } from "./policies.js";
@@ -432,6 +433,25 @@ const STYLES = `
   .consent-banner .btn-consent { background: var(--teal); color: #fff; border: none; padding: 9px 20px; border-radius: 8px; font-family: 'Syne',sans-serif; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   [data-theme="dark"] .consent-banner { background: #1e293b; }
 
+  /* ── ADMIN DASHBOARD ────────────────────────────────────────────────────── */
+  .admin-modal { max-width: 680px; max-height: 88vh; display: flex; flex-direction: column; }
+  .admin-stats { display: flex; gap: 12px; margin-bottom: 20px; }
+  .admin-stat { flex: 1; background: var(--slate-light); border-radius: 10px; padding: 14px 10px; text-align: center; }
+  .admin-stat-num { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--teal); line-height: 1; }
+  .admin-stat-label { font-size: 11px; color: var(--slate); font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+  .admin-list { flex: 1; overflow-y: auto; min-height: 0; border: 1.5px solid var(--border); border-radius: 10px; }
+  .admin-user-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .admin-user-row:last-child { border-bottom: none; }
+  .admin-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .admin-user-info { flex: 1; min-width: 0; }
+  .admin-user-email { font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .admin-user-meta { font-size: 11px; color: var(--slate); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .admin-plan-badge { font-size: 10px; font-weight: 700; font-family: 'DM Mono', monospace; padding: 2px 8px; border-radius: 10px; background: linear-gradient(135deg,#f59e0b,#d97706); color: #fff; white-space: nowrap; flex-shrink: 0; }
+  .admin-rules-box { background: var(--slate-light); border-radius: 8px; padding: 12px 14px; margin-top: 12px; }
+  .admin-rules-box pre { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--ink); white-space: pre-wrap; line-height: 1.6; }
+  [data-theme="dark"] .admin-stat { background: rgba(255,255,255,0.05); }
+  [data-theme="dark"] .admin-rules-box { background: rgba(255,255,255,0.05); }
+
   /* ── ONBOARDING MODAL ───────────────────────────────────────────────────── */
   .onboard-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 800; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .onboard-modal { background: var(--white); border-radius: 20px; width: 100%; max-width: 420px; padding: 36px 32px 28px; box-shadow: 0 24px 64px rgba(0,0,0,0.18); display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -794,6 +814,184 @@ function PoliciesModal({ initialTab = "medical", onClose }) {
             Last updated: June 2026 · Questions? {CONTACT_EMAIL}
           </div>
         </div>
+
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button className="btn btn-primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Admin Dashboard ───────────────────────────────────────────────────────────
+const ADMIN_EMAIL = "mojeedfetuga62@gmail.com";
+const FIRESTORE_RULES = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.token.email == "${ADMIN_EMAIL}";
+    }
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+      allow list, read:  if isAdmin();
+    }
+    match /backups/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+  }
+}`;
+
+function AdminDashboard({ onClose }) {
+  const [users, setUsers]     = useState(null);   // null = loading
+  const [error, setError]     = useState(null);
+  const [copied, setCopied]   = useState(false);
+  const [showRules, setShowRules] = useState(false);
+
+  useEffect(() => {
+    getProUsers()
+      .then(setUsers)
+      .catch(e => {
+        if (e.code === "permission-denied") {
+          setError("permission-denied");
+        } else {
+          setError(e.message || "Failed to load users");
+        }
+      });
+  }, []);
+
+  const totalRevenue = users
+    ? users.length * 5000
+    : 0;
+
+  const copyEmails = () => {
+    if (!users?.length) return;
+    navigator.clipboard.writeText(users.map(u => u.email).filter(Boolean).join(", "));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const fmtDate = iso => iso
+    ? new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })
+    : "—";
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal admin-modal">
+        <div className="modal-title" style={{ marginBottom: 16 }}>
+          <span className="dot" />🔐 Admin Dashboard
+          <button
+            onClick={onClose}
+            style={{ marginLeft: "auto", background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "var(--slate)" }}
+          >×</button>
+        </div>
+
+        {/* Stats */}
+        {users && (
+          <div className="admin-stats">
+            <div className="admin-stat">
+              <div className="admin-stat-num">{users.length}</div>
+              <div className="admin-stat-label">Pro Users</div>
+            </div>
+            <div className="admin-stat">
+              <div className="admin-stat-num">₦{totalRevenue.toLocaleString()}</div>
+              <div className="admin-stat-label">Total Revenue</div>
+            </div>
+            <div className="admin-stat">
+              <div className="admin-stat-num">
+                {users.filter(u => {
+                  if (!u.paidAt) return false;
+                  const d = new Date(u.paidAt);
+                  const now = new Date();
+                  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                }).length}
+              </div>
+              <div className="admin-stat-label">This Month</div>
+            </div>
+          </div>
+        )}
+
+        {/* Error: permission denied → show rules */}
+        {error === "permission-denied" && (
+          <div>
+            <div className="msg-bar" style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", marginBottom: 12 }}>
+              ⚠ Firestore rules need updating before this list can load.
+            </div>
+            <button
+              className="btn btn-secondary"
+              style={{ marginBottom: 8 }}
+              onClick={() => setShowRules(r => !r)}
+            >
+              {showRules ? "Hide rules" : "📋 Show rules to copy"}
+            </button>
+            {showRules && (
+              <div className="admin-rules-box">
+                <div style={{ fontSize: 11, color: "var(--slate)", fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>
+                  Go to Firebase Console → Firestore → Rules → replace with:
+                </div>
+                <pre>{FIRESTORE_RULES}</pre>
+                <button
+                  className="btn btn-primary"
+                  style={{ marginTop: 10, fontSize: 12 }}
+                  onClick={() => { navigator.clipboard.writeText(FIRESTORE_RULES); }}
+                >
+                  Copy rules
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && error !== "permission-denied" && (
+          <div className="msg-bar info">{error}</div>
+        )}
+
+        {/* Loading */}
+        {users === null && !error && (
+          <div style={{ textAlign: "center", padding: "32px 0", color: "var(--slate)", fontSize: 13 }}>
+            Loading Pro users…
+          </div>
+        )}
+
+        {/* User list */}
+        {users && users.length === 0 && (
+          <div style={{ textAlign: "center", padding: "32px 0", color: "var(--slate)", fontSize: 13 }}>
+            No Pro users yet. Share the app!
+          </div>
+        )}
+
+        {users && users.length > 0 && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--slate)", fontFamily: "'DM Mono',monospace" }}>
+                {users.length} user{users.length !== 1 ? "s" : ""}
+              </span>
+              <button className="btn btn-secondary" style={{ fontSize: 12, padding: "5px 12px" }} onClick={copyEmails}>
+                {copied ? "✓ Copied!" : "Copy all emails"}
+              </button>
+            </div>
+            <div className="admin-list">
+              {[...users].sort((a, b) => (b.paidAt || "").localeCompare(a.paidAt || "")).map(u => (
+                <div key={u.uid} className="admin-user-row">
+                  <div className="admin-avatar">
+                    {(u.email || u.displayName || "?")[0].toUpperCase()}
+                  </div>
+                  <div className="admin-user-info">
+                    <div className="admin-user-email">{u.email || "—"}</div>
+                    <div className="admin-user-meta">
+                      Paid {fmtDate(u.paidAt)} · ref: {u.ref || "—"}
+                    </div>
+                  </div>
+                  <span className="admin-plan-badge">
+                    {u.plan === "lifetime" ? "Lifetime" : u.plan || "Pro"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="modal-actions" style={{ marginTop: 16 }}>
           <button className="btn btn-primary" onClick={onClose}>Close</button>
@@ -2228,23 +2426,47 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
           </div>
         </div>
 
-        {!user && (
-          <div className="msg-bar info" style={{ marginBottom: 12 }}>
-            ℹ Sign in with Google (Backup tab) first — your Pro status will be saved to your account
-          </div>
-        )}
         {!IS_PAYSTACK_CONFIGURED && (
           <div className="msg-bar info" style={{ marginBottom: 12 }}>
-            ℹ Demo mode — add your Paystack public key in paystackConfig.js to enable payments
+            ℹ Demo mode — Paystack key not configured yet
           </div>
         )}
 
-        <div className="modal-actions">
-          <button className="btn btn-secondary" onClick={onClose}>Maybe later</button>
-          <button className="btn btn-gold" onClick={pay} disabled={paying} style={{ flex: 2, justifyContent: "center" }}>
-            {paying ? "Opening payment…" : "⭐ Unlock Pro — ₦5,000"}
-          </button>
-        </div>
+        {/* Step 1: sign in — shown when user not signed in */}
+        {!user ? (
+          <div style={{ textAlign: "center", padding: "4px 0 8px" }}>
+            <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14, lineHeight: 1.6 }}>
+              Sign in with Google first so your Pro status is saved to your account and works on all your devices.
+            </p>
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", justifyContent: "center", gap: 10, fontSize: 15, padding: "12px 20px" }}
+              onClick={async () => {
+                try { await signInWithGoogle(); }
+                catch { toast("Sign-in was cancelled — try again"); }
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" style={{ flexShrink: 0 }}>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Sign in with Google
+            </button>
+            <div className="modal-actions" style={{ marginTop: 12 }}>
+              <button className="btn btn-secondary" style={{ width: "100%" }} onClick={onClose}>Maybe later</button>
+            </div>
+          </div>
+        ) : (
+          /* Step 2: pay — shown after sign in */
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={onClose}>Maybe later</button>
+            <button className="btn btn-gold" onClick={pay} disabled={paying} style={{ flex: 2, justifyContent: "center" }}>
+              {paying ? "Opening payment…" : "⭐ Unlock Pro — ₦5,000"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3002,6 +3224,10 @@ export default function App() {
     setConsentDone(true);
   };
 
+  // ── Admin dashboard ───────────────────────────────────────────────────────
+  const [adminOpen, setAdminOpen] = useState(false);
+  const isAdmin = user?.email === ADMIN_EMAIL;
+
   // ── Onboarding (first-time users only) ───────────────────────────────────
   const [onboardDone, setOnboardDone] = useState(() => !!localStorage.getItem("mh_onboarded_v1"));
   const closeOnboard = () => {
@@ -3149,6 +3375,9 @@ export default function App() {
             <a onClick={() => setPolicyOpen("privacy")}>🔒 Privacy Policy</a>
             <a onClick={() => setPolicyOpen("terms")}>📋 Terms of Service</a>
             <a href={`mailto:${CONTACT_EMAIL}`}>✉ Contact</a>
+            {isAdmin && (
+              <a onClick={() => setAdminOpen(true)} style={{ color: "var(--teal)", fontWeight: 700 }}>🔐 Admin</a>
+            )}
           </div>
           <div className="app-footer-copy">
             © {new Date().getFullYear()} MetricHealth · Not a medical device · For personal tracking only · Data encrypted end-to-end
@@ -3169,6 +3398,10 @@ export default function App() {
 
       {policyOpen && (
         <PoliciesModal initialTab={policyOpen} onClose={() => setPolicyOpen(null)} />
+      )}
+
+      {adminOpen && isAdmin && (
+        <AdminDashboard onClose={() => setAdminOpen(false)} />
       )}
 
       {/* First-time onboarding guide */}
