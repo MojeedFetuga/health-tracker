@@ -9,7 +9,7 @@ import {
   registerUser, getAllUsers, getProUsers,
 } from "./cloudBackup.js";
 import { PAYSTACK_PUBLIC_KEY, PLANS, IS_PAYSTACK_CONFIGURED } from "./paystackConfig.js";
-import { MEDICAL_DISCLAIMER, PRIVACY_POLICY, TERMS_OF_SERVICE, CONTACT_EMAIL } from "./policies.js";
+import { MEDICAL_DISCLAIMER, PRIVACY_POLICY, TERMS_OF_SERVICE, CONTACT_EMAIL, DEVELOPER_NAME, DEVELOPER_URL } from "./policies.js";
 import { IS_DRIVE_CONFIGURED } from "./driveConfig.js";
 import {
   isDriveConnected, getDriveLastBackup,
@@ -482,6 +482,22 @@ const STYLES = `
   .onboard-skip { margin-top: 16px; font-size: 12px; color: var(--slate); opacity: 0.6; cursor: pointer; text-decoration: underline; font-family: 'DM Mono', monospace; }
   .onboard-skip:hover { opacity: 1; }
   [data-theme="dark"] .onboard-modal { background: #1e293b; }
+
+  /* ── PWA INSTALL BANNER ─────────────────────────────────────────────────── */
+  .install-banner { position: fixed; bottom: 0; left: 0; right: 0; z-index: 600; background: linear-gradient(135deg, #0d9488, #0f766e); color: #fff; padding: 14px 18px; display: flex; align-items: center; gap: 14px; box-shadow: 0 -4px 28px rgba(13,148,136,0.35); flex-wrap: wrap; }
+  .install-banner-icon { font-size: 30px; flex-shrink: 0; }
+  .install-banner-text { flex: 1; min-width: 160px; }
+  .install-banner-text strong { display: block; font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+  .install-banner-text span { font-size: 12px; opacity: 0.88; line-height: 1.4; }
+  .install-banner-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .btn-install { background: #fff; color: var(--teal-dark); border: none; padding: 9px 18px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; transition: opacity 0.15s; }
+  .btn-install:hover { opacity: 0.9; }
+  .btn-install-dismiss { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 9px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap; font-family: 'Syne', sans-serif; }
+  .btn-install-dismiss:hover { background: rgba(255,255,255,0.25); }
+  /* iOS instruction callout */
+  .ios-install-tip { font-size: 12px; opacity: 0.9; margin-top: 4px; }
+  /* push consent banner up when install banner visible */
+  .consent-banner.with-install { bottom: 80px; }
 
   /* ── APP FOOTER ──────────────────────────────────────────────────────────── */
   .app-footer { border-top: 1px solid var(--border); margin-top: 40px; padding: 20px 0 32px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
@@ -2337,6 +2353,81 @@ function useReminders() {
   return { config, setConfig, permission, requestPermission };
 }
 
+// ── PWA INSTALL PROMPT ────────────────────────────────────────────────────────
+const INSTALL_DISMISSED_KEY = "mh_install_dismissed";
+const INSTALL_DONE_KEY      = "mh_installed";
+const REDISPLAY_DAYS        = 3; // re-prompt after this many days if dismissed
+
+function useInstallPrompt() {
+  const isAlreadyInstalled = () =>
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true ||
+    !!localStorage.getItem(INSTALL_DONE_KEY);
+
+  const [deferredEvt, setDeferredEvt] = useState(null);
+  const [installed,   setInstalled]   = useState(isAlreadyInstalled);
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
+
+  useEffect(() => {
+    if (installed) return;
+    const handler = e => { e.preventDefault(); setDeferredEvt(e); };
+    const onInstalled = () => {
+      setInstalled(true);
+      setDeferredEvt(null);
+      localStorage.setItem(INSTALL_DONE_KEY, "1");
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, [installed]);
+
+  const triggerInstall = async () => {
+    if (!deferredEvt) return false;
+    deferredEvt.prompt();
+    const { outcome } = await deferredEvt.userChoice;
+    setDeferredEvt(null);
+    if (outcome === "accepted") {
+      setInstalled(true);
+      localStorage.setItem(INSTALL_DONE_KEY, "1");
+    }
+    return outcome === "accepted";
+  };
+
+  // canPrompt: browser supports it OR it's iOS (manual share-sheet flow)
+  const canPrompt = !installed && (!!deferredEvt || isIOS);
+
+  return { canPrompt, installed, isIOS, triggerInstall };
+}
+
+function InstallBanner({ isIOS, onInstall, onDismiss }) {
+  return (
+    <div className="install-banner">
+      <div className="install-banner-icon">📲</div>
+      <div className="install-banner-text">
+        <strong>Install MetricHealth on your device</strong>
+        {isIOS ? (
+          <span className="ios-install-tip">
+            Tap the <strong>Share</strong> button (⎙) in Safari, then choose <strong>"Add to Home Screen"</strong>
+          </span>
+        ) : (
+          <span>Works offline · Instant access · No app store needed</span>
+        )}
+      </div>
+      <div className="install-banner-actions">
+        {!isIOS && (
+          <button className="btn-install" onClick={onInstall}>Install App</button>
+        )}
+        <button className="btn-install-dismiss" onClick={onDismiss}>
+          {isIOS ? "Got it" : "Not now"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── PRO STATUS HOOK ───────────────────────────────────────────────────────────
 function usePro(user) {
   const [isPro, setIsPro] = useState(() => {
@@ -3256,6 +3347,43 @@ export default function App() {
   // ── Admin check ───────────────────────────────────────────────────────────
   const isAdmin = user?.email === ADMIN_EMAIL;
 
+  // ── PWA install prompt ────────────────────────────────────────────────────
+  const { canPrompt, installed: pwaInstalled, isIOS, triggerInstall } = useInstallPrompt();
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+
+  // Decide whether we can display the banner (respects dismiss cooldown)
+  const installBannerAllowed = () => {
+    if (!canPrompt || pwaInstalled) return false;
+    const ts = localStorage.getItem(INSTALL_DISMISSED_KEY);
+    if (!ts) return true;
+    const daysSince = (Date.now() - parseInt(ts, 10)) / 86_400_000;
+    return daysSince >= REDISPLAY_DAYS;
+  };
+
+  // Show banner after 25 seconds of engagement
+  useEffect(() => {
+    if (!installBannerAllowed()) return;
+    const t = setTimeout(() => setShowInstallBanner(true), 25_000);
+    return () => clearTimeout(t);
+  }, [canPrompt, pwaInstalled]); // eslint-disable-line
+
+  // Also show banner when onboarding completes (user is now oriented)
+  const closeOnboardAndPromptInstall = () => {
+    localStorage.setItem("mh_onboarded_v1", "1");
+    setOnboardDone(true);
+    setTimeout(() => { if (installBannerAllowed()) setShowInstallBanner(true); }, 800);
+  };
+
+  const dismissInstallBanner = () => {
+    setShowInstallBanner(false);
+    localStorage.setItem(INSTALL_DISMISSED_KEY, String(Date.now()));
+  };
+
+  const handleInstall = async () => {
+    const accepted = await triggerInstall();
+    if (accepted) setShowInstallBanner(false);
+  };
+
   // ── Onboarding (first-time users only) ───────────────────────────────────
   const [onboardDone, setOnboardDone] = useState(() => !!localStorage.getItem("mh_onboarded_v1"));
   const closeOnboard = () => {
@@ -3354,6 +3482,15 @@ export default function App() {
               {darkMode ? "☀️" : "🌙"}
             </button>
             {isPro && <span className="pro-badge">⭐ Pro</span>}
+            {canPrompt && !pwaInstalled && !showInstallBanner && (
+              <button
+                onClick={() => setShowInstallBanner(true)}
+                style={{ background: "none", border: "1.5px solid var(--teal)", color: "var(--teal)", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontFamily: "'DM Mono',monospace", cursor: "pointer", fontWeight: 600 }}
+                title="Install MetricHealth on your device"
+              >
+                📲 Install
+              </button>
+            )}
             {user && syncLabel && (
               <span style={{
                 fontFamily: "'DM Mono', monospace",
@@ -3407,7 +3544,7 @@ export default function App() {
             <a href={`mailto:${CONTACT_EMAIL}`}>✉ Contact</a>
           </div>
           <div className="app-footer-copy">
-            © {new Date().getFullYear()} MetricHealth · Not a medical device · For personal tracking only · Data encrypted end-to-end
+            © {new Date().getFullYear()} <a href={DEVELOPER_URL} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{DEVELOPER_NAME}</a> · MetricHealth · Not a medical device · Data encrypted end-to-end
           </div>
         </footer>
       </div>
@@ -3429,11 +3566,20 @@ export default function App() {
 
 
       {/* First-time onboarding guide */}
-      {!onboardDone && <OnboardingModal onClose={closeOnboard} />}
+      {!onboardDone && <OnboardingModal onClose={closeOnboardAndPromptInstall} />}
 
-      {/* First-use consent banner */}
+      {/* PWA install banner — shown after engagement, re-shown every 3 days */}
+      {showInstallBanner && !pwaInstalled && (
+        <InstallBanner
+          isIOS={isIOS}
+          onInstall={handleInstall}
+          onDismiss={dismissInstallBanner}
+        />
+      )}
+
+      {/* First-use consent banner (pushed up if install banner also showing) */}
       {!consentDone && (
-        <div className="consent-banner">
+        <div className={`consent-banner${showInstallBanner && !pwaInstalled ? " with-install" : ""}`}>
           <p>
             MetricHealth is <strong>not a medical device</strong> and does not provide medical advice.
             By using this app you agree to our{" "}

@@ -1,12 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // MetricHealth — Legal Policy Documents
 // Last updated: June 2026
-// Developer: Mojeed Fetuga  |  Contact: mojeedfetuga62@gmail.com
+// Developer: Palladium Innovations  |  https://www.palladiuminnovations.com.ng/
+// Contact: mojeedfetuga62@gmail.com
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const POLICY_DATE = "June 2026";
-export const CONTACT_EMAIL = "mojeedfetuga62@gmail.com";
-export const APP_URL = "https://metrichealth.vercel.app";
+export const POLICY_DATE      = "June 2026";
+export const CONTACT_EMAIL    = "mojeedfetuga62@gmail.com";
+export const APP_URL          = "https://metrichealth.vercel.app";
+export const DEVELOPER_NAME   = "Palladium Innovations";
+export const DEVELOPER_URL    = "https://www.palladiuminnovations.com.ng/";
 
 // ─────────────────────────────────────────────────────────────────────────────
 export const MEDICAL_DISCLAIMER = {
@@ -39,7 +42,7 @@ If any reading triggers a "Crisis" or "High" alert, seek immediate professional 
     },
     {
       heading: "No Liability for Health Outcomes",
-      body: `The developer of MetricHealth (Mojeed Fetuga) accepts no liability whatsoever for any health outcome, injury, illness, loss, or damage arising from the use of this application or from reliance on any information displayed within it. Your use of this application is entirely at your own risk.`,
+      body: `The developer of MetricHealth (Palladium Innovations) accepts no liability whatsoever for any health outcome, injury, illness, loss, or damage arising from the use of this application or from reliance on any information displayed within it. Your use of this application is entirely at your own risk.`,
     },
   ],
 };
@@ -120,7 +123,7 @@ If you have not signed in for 24 months, we may delete your cloud backup to comp
     },
     {
       heading: "Contact",
-      body: `For privacy-related enquiries, data access requests, or data deletion requests:\n\nEmail: ${CONTACT_EMAIL}\nApplication: ${APP_URL}`,
+      body: `For privacy-related enquiries, data access requests, or data deletion requests:\n\nEmail: ${CONTACT_EMAIL}\nDeveloper: ${DEVELOPER_URL}\nApplication: ${APP_URL}`,
     },
   ],
 };
@@ -137,7 +140,7 @@ These Terms are governed by the laws of the Federal Republic of Nigeria.`,
     },
     {
       heading: "Description of Service",
-      body: `MetricHealth is a personal health-tracking Progressive Web Application (PWA) that allows individuals to log, store, and review personal health readings. The App is provided by an independent developer (Mojeed Fetuga) and is not affiliated with any healthcare institution, hospital, or government health authority.`,
+      body: `MetricHealth is a personal health-tracking Progressive Web Application (PWA) that allows individuals to log, store, and review personal health readings. The App is developed and maintained by Palladium Innovations (${DEVELOPER_URL}) and is not affiliated with any healthcare institution, hospital, or government health authority.`,
     },
     {
       heading: "Not a Medical Service",
@@ -172,7 +175,7 @@ Payments are processed by Paystack. The ₦5,000 Pro fee is a one-time, non-recu
     },
     {
       heading: "Limitation of Liability",
-      body: `TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE DEVELOPER (MOJEED FETUGA) SHALL NOT BE LIABLE FOR:
+      body: `TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, PALLADIUM INNOVATIONS SHALL NOT BE LIABLE FOR:
 
 • Any health outcome, injury, illness, or death arising from use of or reliance on this App
 • Loss of data due to device failure, browser data clearing, or discontinuation of the service
@@ -193,7 +196,7 @@ In the event of discontinuation of cloud services, you will be given at least 30
     },
     {
       heading: "Intellectual Property",
-      body: `MetricHealth, its design, code, and content are the intellectual property of Mojeed Fetuga. You may not reproduce, distribute, or create derivative works without written permission.`,
+      body: `MetricHealth, its design, code, and content are the intellectual property of Palladium Innovations. You may not reproduce, distribute, or create derivative works without written permission.`,
     },
     {
       heading: "Changes to Terms",
@@ -201,7 +204,7 @@ In the event of discontinuation of cloud services, you will be given at least 30
     },
     {
       heading: "Contact",
-      body: `For questions about these Terms:\n\nEmail: ${CONTACT_EMAIL}\nApplication: ${APP_URL}`,
+      body: `For questions about these Terms:\n\nEmail: ${CONTACT_EMAIL}\nDeveloper: ${DEVELOPER_URL}\nApplication: ${APP_URL}`,
     },
   ],
 };
