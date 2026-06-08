@@ -5,9 +5,10 @@ import { IS_CONFIGURED } from "./firebaseConfig.js";
 import {
   listenAuthState, signInWithGoogle, signOut,
   backupToCloud, restoreFromCloud, subscribeToCloud,
-  setProStatus, subscribeProStatus,
+  setProStatus, subscribeProStatus, deleteAllUserData,
 } from "./cloudBackup.js";
 import { PAYSTACK_PUBLIC_KEY, PLANS, IS_PAYSTACK_CONFIGURED } from "./paystackConfig.js";
+import { MEDICAL_DISCLAIMER, PRIVACY_POLICY, TERMS_OF_SERVICE, CONTACT_EMAIL } from "./policies.js";
 
 const STORAGE_KEY = "healthtracker_v1";
 
@@ -403,6 +404,35 @@ const STYLES = `
   .pro-features-list { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
   .pro-features-list li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
   .pro-features-list li span.check { color: var(--teal); font-weight: 700; font-size: 16px; flex-shrink: 0; }
+
+  /* ── POLICIES MODAL ─────────────────────────────────────────────────────── */
+  .policy-modal { max-width: 640px; max-height: 82vh; display: flex; flex-direction: column; }
+  .policy-modal-body { overflow-y: auto; flex: 1; padding-right: 4px; }
+  .policy-modal-body::-webkit-scrollbar { width: 6px; }
+  .policy-modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .policy-section { margin-bottom: 22px; }
+  .policy-section h3 { font-family: 'DM Serif Display', serif; font-size: 15px; margin-bottom: 7px; color: var(--ink); border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+  .policy-section p { font-size: 13px; line-height: 1.75; color: var(--ink); white-space: pre-line; }
+  .policy-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+  .policy-tab-btn { padding: 6px 14px; border: 1.5px solid var(--border); border-radius: 20px; font-family: 'Syne',sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; background: transparent; color: var(--slate); transition: all 0.15s; }
+  .policy-tab-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  [data-theme="dark"] .policy-tab-btn.active { background: var(--teal); border-color: var(--teal); color: #fff; }
+
+  /* ── CONSENT BANNER ──────────────────────────────────────────────────────── */
+  .consent-banner { position: fixed; bottom: 0; left: 0; right: 0; background: var(--ink); color: var(--cream); padding: 16px 20px; z-index: 500; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 -4px 24px rgba(0,0,0,0.2); }
+  .consent-banner p { font-size: 13px; line-height: 1.5; flex: 1; min-width: 220px; opacity: 0.9; }
+  .consent-banner a { color: var(--teal); cursor: pointer; text-decoration: underline; }
+  .consent-banner .btn-consent { background: var(--teal); color: #fff; border: none; padding: 9px 20px; border-radius: 8px; font-family: 'Syne',sans-serif; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  [data-theme="dark"] .consent-banner { background: #1e293b; }
+
+  /* ── APP FOOTER ──────────────────────────────────────────────────────────── */
+  .app-footer { border-top: 1px solid var(--border); margin-top: 40px; padding: 20px 0 32px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .app-footer-brand { font-family: 'DM Serif Display', serif; font-size: 15px; color: var(--ink); }
+  .app-footer-brand span { color: var(--teal); font-style: italic; }
+  .app-footer-links { display: flex; gap: 16px; flex-wrap: wrap; }
+  .app-footer-links a { font-size: 12px; color: var(--slate); cursor: pointer; text-decoration: none; font-family: 'DM Mono', monospace; transition: color 0.15s; }
+  .app-footer-links a:hover { color: var(--teal); }
+  .app-footer-copy { width: 100%; font-size: 11px; color: var(--slate); font-family: 'DM Mono', monospace; opacity: 0.6; }
 `;
 
 function useOnlineStatus() {
@@ -669,6 +699,58 @@ function PinCard({ toast }) {
           ✓ PIN is active — app is protected
         </div>
       )}
+    </div>
+  );
+}
+
+// ── POLICIES MODAL ────────────────────────────────────────────────────────────
+const ALL_POLICIES = [
+  { key: "medical",  label: "⚕ Medical Disclaimer", doc: MEDICAL_DISCLAIMER },
+  { key: "privacy",  label: "🔒 Privacy Policy",     doc: PRIVACY_POLICY },
+  { key: "terms",    label: "📋 Terms of Service",   doc: TERMS_OF_SERVICE },
+];
+
+function PoliciesModal({ initialTab = "medical", onClose }) {
+  const [active, setActive] = useState(initialTab);
+  const doc = ALL_POLICIES.find(p => p.key === active)?.doc;
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal policy-modal">
+        <div className="modal-title" style={{ marginBottom: 4 }}>
+          <span className="dot" />Legal &amp; Policies
+        </div>
+
+        {/* Tab switcher */}
+        <div className="policy-tabs">
+          {ALL_POLICIES.map(p => (
+            <button
+              key={p.key}
+              className={`policy-tab-btn${active === p.key ? " active" : ""}`}
+              onClick={() => setActive(p.key)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Scrollable content */}
+        <div className="policy-modal-body">
+          {doc && doc.sections.map((s, i) => (
+            <div key={i} className="policy-section">
+              <h3>{s.heading}</h3>
+              <p>{s.body}</p>
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: "var(--slate)", fontFamily: "'DM Mono',monospace", marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+            Last updated: June 2026 · Questions? {CONTACT_EMAIL}
+          </div>
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button className="btn btn-primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2388,6 +2470,36 @@ service cloud.firestore {
       )}
 
       <PinCard toast={toast} />
+
+      {/* Data deletion — NDPR Right to Erasure */}
+      <div className="card" style={{ borderColor: "var(--rose-light)" }}>
+        <div className="card-title"><span className="dot" style={{ background: "var(--rose)" }} />Your Data Rights</div>
+        <p style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14, lineHeight: 1.6 }}>
+          Under the Nigeria Data Protection Regulation (NDPR), you have the right to permanently delete all your cloud data at any time. Your data is encrypted — even we cannot read it.
+        </p>
+        <p style={{ fontSize: 12, color: "var(--slate)", marginBottom: 16, lineHeight: 1.6 }}>
+          ⚠ This will permanently delete your cloud backup and Pro status from our servers. Your local data on this device will not be affected.
+        </p>
+        <button
+          className="btn btn-danger"
+          disabled={!!opLoading || !isOnline}
+          onClick={async () => {
+            if (!confirm("Permanently delete all your cloud data (backup + Pro status) from MetricHealth servers?\n\nThis cannot be undone. Your data on this device will not be affected.")) return;
+            setOpLoading("delete");
+            try {
+              await deleteAllUserData();
+              await signOut();
+              toast("All cloud data deleted. You have been signed out.");
+            } catch (e) {
+              setStatus({ type: "error", msg: "Delete failed: " + e.message });
+            } finally {
+              setOpLoading(null);
+            }
+          }}
+        >
+          {opLoading === "delete" ? "Deleting…" : "🗑 Delete All My Cloud Data"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2418,6 +2530,16 @@ export default function App() {
   const isPro = usePro(user);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const onUpgrade = () => setUpgradeOpen(true);
+
+  // ── Policies modal ────────────────────────────────────────────────────────
+  const [policyOpen, setPolicyOpen] = useState(null); // null | "medical" | "privacy" | "terms"
+
+  // ── First-use consent banner ──────────────────────────────────────────────
+  const [consentDone, setConsentDone] = useState(() => !!localStorage.getItem("mh_consent_v1"));
+  const acceptConsent = () => {
+    localStorage.setItem("mh_consent_v1", "1");
+    setConsentDone(true);
+  };
 
   // Refs for loop prevention
   const lastWriteRef         = useRef(localStorage.getItem("htLastSync") || "");
@@ -2553,8 +2675,24 @@ export default function App() {
         {tab === "checks"    && <CheckTypesTab data={data} save={save} toast={toast} />}
         {tab === "reminders" && <RemindersTab data={data} isPro={isPro} onUpgrade={onUpgrade} />}
         {tab === "backup"    && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} user={user} syncStatus={syncStatus} isPro={isPro} onUpgrade={onUpgrade} />}
+
+        {/* Footer */}
+        <footer className="app-footer">
+          <div className="app-footer-brand">Metric<span>Health</span></div>
+          <div className="app-footer-links">
+            <a onClick={() => setPolicyOpen("medical")}>⚕ Medical Disclaimer</a>
+            <a onClick={() => setPolicyOpen("privacy")}>🔒 Privacy Policy</a>
+            <a onClick={() => setPolicyOpen("terms")}>📋 Terms of Service</a>
+            <a href={`mailto:${CONTACT_EMAIL}`}>✉ Contact</a>
+          </div>
+          <div className="app-footer-copy">
+            © {new Date().getFullYear()} MetricHealth · Not a medical device · For personal tracking only · Data encrypted end-to-end
+          </div>
+        </footer>
       </div>
+
       {toastMsg && <Toast msg={toastMsg} onDone={() => setToastMsg("")} />}
+
       {upgradeOpen && (
         <UpgradeModal
           user={user}
@@ -2562,6 +2700,24 @@ export default function App() {
           onClose={() => setUpgradeOpen(false)}
           onProActivated={() => { /* isPro updates automatically via usePro hook */ }}
         />
+      )}
+
+      {policyOpen && (
+        <PoliciesModal initialTab={policyOpen} onClose={() => setPolicyOpen(null)} />
+      )}
+
+      {/* First-use consent banner */}
+      {!consentDone && (
+        <div className="consent-banner">
+          <p>
+            MetricHealth is <strong>not a medical device</strong> and does not provide medical advice.
+            By using this app you agree to our{" "}
+            <a onClick={() => setPolicyOpen("medical")}>Medical Disclaimer</a>,{" "}
+            <a onClick={() => setPolicyOpen("privacy")}>Privacy Policy</a>, and{" "}
+            <a onClick={() => setPolicyOpen("terms")}>Terms of Service</a>.
+          </p>
+          <button className="btn-consent" onClick={acceptConsent}>I Understand</button>
+        </div>
       )}
     </>
   );
