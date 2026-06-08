@@ -2332,7 +2332,7 @@ function useReminders() {
           new Notification(`${icon} DailyVitals — ${label} check`, {
             body: `Time to log your ${label.toLowerCase()} health readings!`,
             icon: "/favicon.svg",
-            tag:  `metrichealth-${key}`,
+            tag:  `dailyvitals-${key}`,
           });
         } catch {}
       }
@@ -2647,7 +2647,7 @@ function useBackupReminders() {
         new Notification("💾 DailyVitals — Backup reminder", {
           body: `Time for your ${cfg.frequency} health data backup. Keep your records safe.`,
           icon: "/favicon.svg",
-          tag:  "metrichealth-backup",
+          tag:  "dailyvitals-backup",
         });
       } catch {}
     };
@@ -2691,7 +2691,7 @@ function RemindersTab({ data, isPro, onUpgrade }) {
     new Notification("🔔 DailyVitals — Test reminder", {
       body: "Reminders are working! You'll see alerts like this at your chosen times.",
       icon: "/favicon.svg",
-      tag:  "metrichealth-test",
+      tag:  "dailyvitals-test",
     });
     setTestSent(true);
     setTimeout(() => setTestSent(false), 3000);
@@ -3536,7 +3536,7 @@ export default function App() {
 
         {/* Footer */}
         <footer className="app-footer">
-          <div className="app-footer-brand">Metric<span>Health</span></div>
+          <div className="app-footer-brand">Daily<span>Vitals</span></div>
           <div className="app-footer-links">
             <a onClick={() => setPolicyOpen("medical")}>⚕ Medical Disclaimer</a>
             <a onClick={() => setPolicyOpen("privacy")}>🔒 Privacy Policy</a>
