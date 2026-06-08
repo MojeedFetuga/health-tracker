@@ -432,6 +432,25 @@ const STYLES = `
   .consent-banner .btn-consent { background: var(--teal); color: #fff; border: none; padding: 9px 20px; border-radius: 8px; font-family: 'Syne',sans-serif; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   [data-theme="dark"] .consent-banner { background: #1e293b; }
 
+  /* ── ONBOARDING MODAL ───────────────────────────────────────────────────── */
+  .onboard-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 800; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .onboard-modal { background: var(--white); border-radius: 20px; width: 100%; max-width: 420px; padding: 36px 32px 28px; box-shadow: 0 24px 64px rgba(0,0,0,0.18); display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .onboard-steps { display: flex; gap: 8px; margin-bottom: 32px; }
+  .onboard-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: all 0.3s; }
+  .onboard-dot.active { background: var(--teal); width: 24px; border-radius: 4px; }
+  .onboard-dot.done { background: var(--teal); opacity: 0.4; }
+  .onboard-icon { font-size: 52px; margin-bottom: 18px; line-height: 1; }
+  .onboard-title { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--ink); margin-bottom: 12px; line-height: 1.2; }
+  .onboard-body { font-size: 14px; color: var(--slate); line-height: 1.7; margin-bottom: 28px; max-width: 320px; }
+  .onboard-body strong { color: var(--ink); }
+  .onboard-actions { display: flex; gap: 10px; width: 100%; }
+  .onboard-actions .btn-back { flex: 0 0 auto; background: transparent; border: 1.5px solid var(--border); color: var(--slate); padding: 10px 18px; border-radius: 10px; font-family: 'Syne',sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .onboard-actions .btn-next { flex: 1; background: var(--teal); color: #fff; border: none; padding: 12px 20px; border-radius: 10px; font-family: 'Syne',sans-serif; font-weight: 700; font-size: 15px; cursor: pointer; transition: background 0.2s; }
+  .onboard-actions .btn-next:hover { background: var(--teal-dark); }
+  .onboard-skip { margin-top: 16px; font-size: 12px; color: var(--slate); opacity: 0.6; cursor: pointer; text-decoration: underline; font-family: 'DM Mono', monospace; }
+  .onboard-skip:hover { opacity: 1; }
+  [data-theme="dark"] .onboard-modal { background: #1e293b; }
+
   /* ── APP FOOTER ──────────────────────────────────────────────────────────── */
   .app-footer { border-top: 1px solid var(--border); margin-top: 40px; padding: 20px 0 32px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
   .app-footer-brand { font-family: 'DM Serif Display', serif; font-size: 15px; color: var(--ink); }
@@ -779,6 +798,99 @@ function PoliciesModal({ initialTab = "medical", onClose }) {
         <div className="modal-actions" style={{ marginTop: 16 }}>
           <button className="btn btn-primary" onClick={onClose}>Close</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Onboarding Modal ─────────────────────────────────────────────────────────
+const ONBOARD_STEPS = [
+  {
+    icon: "🏥",
+    title: "Welcome to MetricHealth",
+    body: (
+      <>
+        Track <strong>blood pressure, glucose, weight, heart rate</strong>, and more — all in one place.
+        Private, free, and works even without internet.
+      </>
+    ),
+  },
+  {
+    icon: "👤",
+    title: "Add yourself as a person",
+    body: (
+      <>
+        Open the <strong>Persons tab</strong> and tap <strong>+ Add Person</strong>.
+        Enter your name. This is the profile you'll log all your health readings under.
+      </>
+    ),
+  },
+  {
+    icon: "📊",
+    title: "Log your first reading",
+    body: (
+      <>
+        On the <strong>Home tab</strong>, tap any metric card — blood pressure, glucose, weight —
+        and enter today's value. Takes less than 10 seconds.
+      </>
+    ),
+  },
+  {
+    icon: "📈",
+    title: "See your progress over time",
+    body: (
+      <>
+        The <strong>Records tab</strong> shows your full history with charts and trends.
+        Log regularly and you'll spot patterns before your next doctor's visit.
+      </>
+    ),
+  },
+  {
+    icon: "🔔",
+    title: "Never miss a check-up",
+    body: (
+      <>
+        In the <strong>Backup tab</strong>, set daily or weekly <strong>reminder notifications</strong> and
+        connect Google Drive to keep your data safe — free for everyone.
+      </>
+    ),
+  },
+];
+
+function OnboardingModal({ onClose }) {
+  const [step, setStep] = useState(0);
+  const current = ONBOARD_STEPS[step];
+  const isLast  = step === ONBOARD_STEPS.length - 1;
+
+  return (
+    <div className="onboard-overlay">
+      <div className="onboard-modal">
+        {/* Step dots */}
+        <div className="onboard-steps">
+          {ONBOARD_STEPS.map((_, i) => (
+            <div
+              key={i}
+              className={`onboard-dot${i === step ? " active" : i < step ? " done" : ""}`}
+            />
+          ))}
+        </div>
+
+        <div className="onboard-icon">{current.icon}</div>
+        <div className="onboard-title">{current.title}</div>
+        <div className="onboard-body">{current.body}</div>
+
+        <div className="onboard-actions">
+          {step > 0 && (
+            <button className="btn-back" onClick={() => setStep(s => s - 1)}>← Back</button>
+          )}
+          <button className="btn-next" onClick={() => isLast ? onClose() : setStep(s => s + 1)}>
+            {isLast ? "Start using MetricHealth →" : "Next →"}
+          </button>
+        </div>
+
+        {!isLast && (
+          <span className="onboard-skip" onClick={onClose}>Skip intro</span>
+        )}
       </div>
     </div>
   );
@@ -2890,6 +3002,13 @@ export default function App() {
     setConsentDone(true);
   };
 
+  // ── Onboarding (first-time users only) ───────────────────────────────────
+  const [onboardDone, setOnboardDone] = useState(() => !!localStorage.getItem("mh_onboarded_v1"));
+  const closeOnboard = () => {
+    localStorage.setItem("mh_onboarded_v1", "1");
+    setOnboardDone(true);
+  };
+
   // Refs for loop prevention
   const lastWriteRef         = useRef(localStorage.getItem("htLastSync") || "");
   const isSyncingFromRemote  = useRef(false);
@@ -2979,10 +3098,7 @@ export default function App() {
             <button className="dark-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
               {darkMode ? "☀️" : "🌙"}
             </button>
-            {isPro
-              ? <span className="pro-badge">⭐ Pro</span>
-              : <button className="btn btn-gold btn-sm" onClick={onUpgrade} style={{ fontSize: 12, padding: "5px 14px" }}>⭐ Pro — ₦5,000</button>
-            }
+            {isPro && <span className="pro-badge">⭐ Pro</span>}
             {user && syncLabel && (
               <span style={{
                 fontFamily: "'DM Mono', monospace",
@@ -3054,6 +3170,9 @@ export default function App() {
       {policyOpen && (
         <PoliciesModal initialTab={policyOpen} onClose={() => setPolicyOpen(null)} />
       )}
+
+      {/* First-time onboarding guide */}
+      {!onboardDone && <OnboardingModal onClose={closeOnboard} />}
 
       {/* First-use consent banner */}
       {!consentDone && (
