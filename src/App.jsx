@@ -6,7 +6,7 @@ import {
   listenAuthState, signInWithGoogle, signOut,
   backupToCloud, restoreFromCloud, subscribeToCloud,
   setProStatus, subscribeProStatus, deleteAllUserData,
-  getProUsers,
+  registerUser, getAllUsers, getProUsers,
 } from "./cloudBackup.js";
 import { PAYSTACK_PUBLIC_KEY, PLANS, IS_PAYSTACK_CONFIGURED } from "./paystackConfig.js";
 import { MEDICAL_DISCLAIMER, PRIVACY_POLICY, TERMS_OF_SERVICE, CONTACT_EMAIL } from "./policies.js";
@@ -434,23 +434,35 @@ const STYLES = `
   [data-theme="dark"] .consent-banner { background: #1e293b; }
 
   /* ── ADMIN DASHBOARD ────────────────────────────────────────────────────── */
-  .admin-modal { max-width: 680px; max-height: 88vh; display: flex; flex-direction: column; }
-  .admin-stats { display: flex; gap: 12px; margin-bottom: 20px; }
-  .admin-stat { flex: 1; background: var(--slate-light); border-radius: 10px; padding: 14px 10px; text-align: center; }
-  .admin-stat-num { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--teal); line-height: 1; }
-  .admin-stat-label { font-size: 11px; color: var(--slate); font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
-  .admin-list { flex: 1; overflow-y: auto; min-height: 0; border: 1.5px solid var(--border); border-radius: 10px; }
-  .admin-user-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .admin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .admin-header h2 { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--ink); }
+  .admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .admin-stat { background: var(--slate-light); border-radius: 12px; padding: 16px 14px; text-align: center; border: 1.5px solid var(--border); }
+  .admin-stat-num { font-family: 'DM Serif Display', serif; font-size: 30px; color: var(--teal); line-height: 1; }
+  .admin-stat-label { font-size: 11px; color: var(--slate); font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 5px; }
+  .admin-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .admin-filter-pills { display: flex; gap: 6px; }
+  .admin-filter-pill { padding: 5px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: transparent; font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; color: var(--slate); transition: all 0.15s; }
+  .admin-filter-pill.active { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 700; }
+  .admin-search { flex: 1; min-width: 180px; padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; font-family: 'Syne', sans-serif; background: var(--white); color: var(--ink); }
+  .admin-search:focus { outline: none; border-color: var(--teal); }
+  .admin-table-wrap { border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .admin-user-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); transition: background 0.1s; }
   .admin-user-row:last-child { border-bottom: none; }
-  .admin-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .admin-user-row:hover { background: var(--slate-light); }
+  .admin-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
   .admin-user-info { flex: 1; min-width: 0; }
   .admin-user-email { font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .admin-user-meta { font-size: 11px; color: var(--slate); font-family: 'DM Mono', monospace; margin-top: 2px; }
-  .admin-plan-badge { font-size: 10px; font-weight: 700; font-family: 'DM Mono', monospace; padding: 2px 8px; border-radius: 10px; background: linear-gradient(135deg,#f59e0b,#d97706); color: #fff; white-space: nowrap; flex-shrink: 0; }
-  .admin-rules-box { background: var(--slate-light); border-radius: 8px; padding: 12px 14px; margin-top: 12px; }
-  .admin-rules-box pre { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--ink); white-space: pre-wrap; line-height: 1.6; }
-  [data-theme="dark"] .admin-stat { background: rgba(255,255,255,0.05); }
-  [data-theme="dark"] .admin-rules-box { background: rgba(255,255,255,0.05); }
+  .admin-plan-badge { font-size: 10px; font-weight: 700; font-family: 'DM Mono', monospace; padding: 3px 9px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+  .admin-plan-badge.pro { background: linear-gradient(135deg,#f59e0b,#d97706); color: #fff; }
+  .admin-plan-badge.free { background: var(--slate-light); color: var(--slate); border: 1px solid var(--border); }
+  .admin-rules-box { background: var(--slate-light); border-radius: 10px; padding: 14px 16px; margin-top: 16px; border: 1.5px solid var(--border); }
+  .admin-rules-box pre { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--ink); white-space: pre-wrap; line-height: 1.7; }
+  .admin-empty { text-align: center; padding: 40px 20px; color: var(--slate); font-size: 14px; }
+  [data-theme="dark"] .admin-stat { background: rgba(255,255,255,0.04); }
+  [data-theme="dark"] .admin-rules-box { background: rgba(255,255,255,0.04); }
+  [data-theme="dark"] .admin-search { background: #1e293b; color: #e2e8f0; }
 
   /* ── ONBOARDING MODAL ───────────────────────────────────────────────────── */
   .onboard-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 800; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -844,159 +856,175 @@ service cloud.firestore {
   }
 }`;
 
-function AdminDashboard({ onClose }) {
-  const [users, setUsers]     = useState(null);   // null = loading
-  const [error, setError]     = useState(null);
-  const [copied, setCopied]   = useState(false);
+function AdminDashboard() {
+  const [allUsers, setAllUsers] = useState(null); // null = loading
+  const [error, setError]       = useState(null);
+  const [filter, setFilter]     = useState("all"); // "all" | "free" | "pro"
+  const [search, setSearch]     = useState("");
+  const [copied, setCopied]     = useState(false);
   const [showRules, setShowRules] = useState(false);
 
-  useEffect(() => {
-    getProUsers()
-      .then(setUsers)
-      .catch(e => {
-        if (e.code === "permission-denied") {
-          setError("permission-denied");
-        } else {
-          setError(e.message || "Failed to load users");
-        }
-      });
-  }, []);
-
-  const totalRevenue = users
-    ? users.length * 5000
-    : 0;
-
-  const copyEmails = () => {
-    if (!users?.length) return;
-    navigator.clipboard.writeText(users.map(u => u.email).filter(Boolean).join(", "));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const load = () => {
+    setAllUsers(null); setError(null);
+    getAllUsers()
+      .then(users => setAllUsers(users))
+      .catch(e => setError(e.code === "permission-denied" ? "permission-denied" : e.message));
   };
+
+  useEffect(() => { load(); }, []);
 
   const fmtDate = iso => iso
     ? new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })
     : "—";
 
+  const proUsers  = allUsers?.filter(u => u.pro)  || [];
+  const freeUsers = allUsers?.filter(u => !u.pro) || [];
+  const thisMonth = proUsers.filter(u => {
+    if (!u.paidAt) return false;
+    const d = new Date(u.paidAt), now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const convRate = allUsers?.length
+    ? Math.round((proUsers.length / allUsers.length) * 100)
+    : 0;
+
+  const filtered = (allUsers || [])
+    .filter(u => filter === "all" || (filter === "pro" ? u.pro : !u.pro))
+    .filter(u => !search || (u.email || "").toLowerCase().includes(search.toLowerCase())
+                          || (u.displayName || "").toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => (b.signedUpAt || b.paidAt || "").localeCompare(a.signedUpAt || a.paidAt || ""));
+
+  const copyEmails = () => {
+    const emails = filtered.map(u => u.email).filter(Boolean).join(", ");
+    if (!emails) return;
+    navigator.clipboard.writeText(emails);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal admin-modal">
-        <div className="modal-title" style={{ marginBottom: 16 }}>
-          <span className="dot" />🔐 Admin Dashboard
-          <button
-            onClick={onClose}
-            style={{ marginLeft: "auto", background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "var(--slate)" }}
-          >×</button>
+    <div>
+      {/* Header */}
+      <div className="admin-header">
+        <h2>🔐 Admin Dashboard</h2>
+        <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={load}>↺ Refresh</button>
+      </div>
+
+      {/* Stats */}
+      {allUsers && (
+        <div className="admin-stats">
+          <div className="admin-stat">
+            <div className="admin-stat-num">{allUsers.length}</div>
+            <div className="admin-stat-label">Total Users</div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-num">{freeUsers.length}</div>
+            <div className="admin-stat-label">Free</div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-num">{proUsers.length}</div>
+            <div className="admin-stat-label">Pro</div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-num" style={{ fontSize: 22 }}>₦{(proUsers.length * 5000).toLocaleString()}</div>
+            <div className="admin-stat-label">Revenue</div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-num">{convRate}%</div>
+            <div className="admin-stat-label">Conversion</div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-num">{thisMonth.length}</div>
+            <div className="admin-stat-label">Pro This Month</div>
+          </div>
         </div>
+      )}
 
-        {/* Stats */}
-        {users && (
-          <div className="admin-stats">
-            <div className="admin-stat">
-              <div className="admin-stat-num">{users.length}</div>
-              <div className="admin-stat-label">Pro Users</div>
-            </div>
-            <div className="admin-stat">
-              <div className="admin-stat-num">₦{totalRevenue.toLocaleString()}</div>
-              <div className="admin-stat-label">Total Revenue</div>
-            </div>
-            <div className="admin-stat">
-              <div className="admin-stat-num">
-                {users.filter(u => {
-                  if (!u.paidAt) return false;
-                  const d = new Date(u.paidAt);
-                  const now = new Date();
-                  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                }).length}
+      {/* Permission error */}
+      {error === "permission-denied" && (
+        <div>
+          <div className="msg-bar" style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", marginBottom: 12 }}>
+            ⚠ Update your Firestore rules to load all users — click below for the exact rules.
+          </div>
+          <button className="btn btn-secondary" style={{ marginBottom: 8 }} onClick={() => setShowRules(r => !r)}>
+            {showRules ? "Hide rules" : "📋 Show Firestore rules to copy"}
+          </button>
+          {showRules && (
+            <div className="admin-rules-box">
+              <div style={{ fontSize: 11, color: "var(--slate)", fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>
+                Firebase Console → Firestore → Rules → replace all → Publish:
               </div>
-              <div className="admin-stat-label">This Month</div>
-            </div>
-          </div>
-        )}
-
-        {/* Error: permission denied → show rules */}
-        {error === "permission-denied" && (
-          <div>
-            <div className="msg-bar" style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", marginBottom: 12 }}>
-              ⚠ Firestore rules need updating before this list can load.
-            </div>
-            <button
-              className="btn btn-secondary"
-              style={{ marginBottom: 8 }}
-              onClick={() => setShowRules(r => !r)}
-            >
-              {showRules ? "Hide rules" : "📋 Show rules to copy"}
-            </button>
-            {showRules && (
-              <div className="admin-rules-box">
-                <div style={{ fontSize: 11, color: "var(--slate)", fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>
-                  Go to Firebase Console → Firestore → Rules → replace with:
-                </div>
-                <pre>{FIRESTORE_RULES}</pre>
-                <button
-                  className="btn btn-primary"
-                  style={{ marginTop: 10, fontSize: 12 }}
-                  onClick={() => { navigator.clipboard.writeText(FIRESTORE_RULES); }}
-                >
-                  Copy rules
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {error && error !== "permission-denied" && (
-          <div className="msg-bar info">{error}</div>
-        )}
-
-        {/* Loading */}
-        {users === null && !error && (
-          <div style={{ textAlign: "center", padding: "32px 0", color: "var(--slate)", fontSize: 13 }}>
-            Loading Pro users…
-          </div>
-        )}
-
-        {/* User list */}
-        {users && users.length === 0 && (
-          <div style={{ textAlign: "center", padding: "32px 0", color: "var(--slate)", fontSize: 13 }}>
-            No Pro users yet. Share the app!
-          </div>
-        )}
-
-        {users && users.length > 0 && (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: "var(--slate)", fontFamily: "'DM Mono',monospace" }}>
-                {users.length} user{users.length !== 1 ? "s" : ""}
-              </span>
-              <button className="btn btn-secondary" style={{ fontSize: 12, padding: "5px 12px" }} onClick={copyEmails}>
-                {copied ? "✓ Copied!" : "Copy all emails"}
+              <pre>{FIRESTORE_RULES}</pre>
+              <button className="btn btn-primary" style={{ marginTop: 10, fontSize: 12 }}
+                onClick={() => navigator.clipboard.writeText(FIRESTORE_RULES)}>
+                Copy rules
               </button>
             </div>
-            <div className="admin-list">
-              {[...users].sort((a, b) => (b.paidAt || "").localeCompare(a.paidAt || "")).map(u => (
+          )}
+        </div>
+      )}
+      {error && error !== "permission-denied" && (
+        <div className="msg-bar info">{error}</div>
+      )}
+
+      {/* Loading */}
+      {allUsers === null && !error && (
+        <div className="admin-empty">Loading users…</div>
+      )}
+
+      {/* Toolbar + list */}
+      {allUsers !== null && !error && (
+        <>
+          <div className="admin-toolbar">
+            <div className="admin-filter-pills">
+              {[["all","All"],["free","Free"],["pro","Pro"]].map(([v,l]) => (
+                <button key={v} className={`admin-filter-pill${filter===v?" active":""}`} onClick={() => setFilter(v)}>
+                  {l} {v==="all"?allUsers.length:v==="pro"?proUsers.length:freeUsers.length}
+                </button>
+              ))}
+            </div>
+            <input
+              className="admin-search"
+              placeholder="Search by email or name…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <button className="btn btn-secondary" style={{ fontSize: 12, whiteSpace: "nowrap" }} onClick={copyEmails}>
+              {copied ? "✓ Copied!" : `Copy ${filtered.length} email${filtered.length!==1?"s":""}`}
+            </button>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="admin-empty">No users match this filter.</div>
+          ) : (
+            <div className="admin-table-wrap">
+              {filtered.map(u => (
                 <div key={u.uid} className="admin-user-row">
-                  <div className="admin-avatar">
+                  <div className="admin-avatar" style={{ background: u.pro ? "#d97706" : "var(--teal)" }}>
                     {(u.email || u.displayName || "?")[0].toUpperCase()}
                   </div>
                   <div className="admin-user-info">
                     <div className="admin-user-email">{u.email || "—"}</div>
                     <div className="admin-user-meta">
-                      Paid {fmtDate(u.paidAt)} · ref: {u.ref || "—"}
+                      {u.displayName && <span>{u.displayName} · </span>}
+                      Joined {fmtDate(u.signedUpAt || u.paidAt)}
+                      {u.pro && u.paidAt && ` · Paid ${fmtDate(u.paidAt)}`}
+                      {u.pro && u.ref && ` · ref: ${u.ref}`}
                     </div>
                   </div>
-                  <span className="admin-plan-badge">
-                    {u.plan === "lifetime" ? "Lifetime" : u.plan || "Pro"}
+                  <span className={`admin-plan-badge ${u.pro ? "pro" : "free"}`}>
+                    {u.pro ? (u.plan === "lifetime" ? "Lifetime" : "Pro") : "Free"}
                   </span>
                 </div>
               ))}
             </div>
-          </>
-        )}
+          )}
 
-        <div className="modal-actions" style={{ marginTop: 16 }}>
-          <button className="btn btn-primary" onClick={onClose}>Close</button>
-        </div>
-      </div>
+          <div style={{ fontSize: 11, color: "var(--slate)", fontFamily: "'DM Mono',monospace", marginTop: 10, opacity: 0.7 }}>
+            Free users = signed in but haven't paid · Pro users = paid ₦5,000 · All emails captured on sign-in
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2442,7 +2470,7 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
               className="btn btn-primary"
               style={{ width: "100%", justifyContent: "center", gap: 10, fontSize: 15, padding: "12px 20px" }}
               onClick={async () => {
-                try { await signInWithGoogle(); }
+                try { await signInWithGoogle(); await registerUser(); }
                 catch { toast("Sign-in was cancelled — try again"); }
               }}
             >
@@ -2943,6 +2971,7 @@ function BackupTab({ data, save, toast, isOnline, user, syncStatus, isPro, onUpg
     setStatus(null);
     try {
       await signInWithGoogle();
+      await registerUser(); // capture email for all signed-in users (free + pro)
       toast("Signed in with Google");
     } catch (e) {
       const code = e?.code || "";
@@ -3224,8 +3253,7 @@ export default function App() {
     setConsentDone(true);
   };
 
-  // ── Admin dashboard ───────────────────────────────────────────────────────
-  const [adminOpen, setAdminOpen] = useState(false);
+  // ── Admin check ───────────────────────────────────────────────────────────
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   // ── Onboarding (first-time users only) ───────────────────────────────────
@@ -3303,6 +3331,7 @@ export default function App() {
     { id: "checks",    label: "🩺 Check Types" },
     { id: "reminders", label: "🔔 Reminders" },
     { id: "backup",    label: "☁ Backup" },
+    ...(isAdmin ? [{ id: "admin", label: "🔐 Admin" }] : []),
   ];
 
   // Sync status pill shown in header when signed in
@@ -3366,6 +3395,7 @@ export default function App() {
         {tab === "checks"    && <CheckTypesTab data={data} save={save} toast={toast} />}
         {tab === "reminders" && <RemindersTab data={data} isPro={isPro} onUpgrade={onUpgrade} />}
         {tab === "backup"    && <BackupTab data={data} save={save} toast={toast} isOnline={isOnline} user={user} syncStatus={syncStatus} isPro={isPro} onUpgrade={onUpgrade} />}
+        {tab === "admin" && isAdmin && <AdminDashboard />}
 
         {/* Footer */}
         <footer className="app-footer">
@@ -3375,9 +3405,6 @@ export default function App() {
             <a onClick={() => setPolicyOpen("privacy")}>🔒 Privacy Policy</a>
             <a onClick={() => setPolicyOpen("terms")}>📋 Terms of Service</a>
             <a href={`mailto:${CONTACT_EMAIL}`}>✉ Contact</a>
-            {isAdmin && (
-              <a onClick={() => setAdminOpen(true)} style={{ color: "var(--teal)", fontWeight: 700 }}>🔐 Admin</a>
-            )}
           </div>
           <div className="app-footer-copy">
             © {new Date().getFullYear()} MetricHealth · Not a medical device · For personal tracking only · Data encrypted end-to-end
@@ -3400,9 +3427,6 @@ export default function App() {
         <PoliciesModal initialTab={policyOpen} onClose={() => setPolicyOpen(null)} />
       )}
 
-      {adminOpen && isAdmin && (
-        <AdminDashboard onClose={() => setAdminOpen(false)} />
-      )}
 
       {/* First-time onboarding guide */}
       {!onboardDone && <OnboardingModal onClose={closeOnboard} />}

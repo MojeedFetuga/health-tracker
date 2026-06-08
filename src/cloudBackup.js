@@ -135,8 +135,48 @@ export async function setProStatus({ plan, ref }) {
   return data;
 }
 
+// ── USER REGISTRATION (free users) ───────────────────────────────────────────
+/**
+ * Called on every Google sign-in. Creates a lightweight /users/{uid} record
+ * for free users so the admin can see all signed-in users, not just Pro payers.
+ * Uses merge:true so it never overwrites Pro status if already set.
+ */
+export async function registerUser() {
+  try {
+    const { auth, db } = getServices();
+    const user = auth.currentUser;
+    if (!user) return;
+    const ref  = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      // First sign-in — create free record
+      await setDoc(ref, {
+        email:       user.email,
+        displayName: user.displayName || "",
+        signedUpAt:  new Date().toISOString(),
+        plan:        "free",
+        pro:         false,
+      });
+    } else {
+      // Subsequent sign-in — just update email/name/lastSeen, preserve Pro status
+      await setDoc(ref, {
+        email:       user.email,
+        displayName: user.displayName || "",
+        lastSeenAt:  new Date().toISOString(),
+      }, { merge: true });
+    }
+  } catch { /* non-critical — don't break the sign-in flow */ }
+}
+
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
-/** Fetch all Pro users. Requires admin Firestore rules (see AdminDashboard). */
+/** Fetch ALL signed-in users (free + pro). Requires admin Firestore rules. */
+export async function getAllUsers() {
+  const { db } = getServices();
+  const snap = await getDocs(collection(db, "users"));
+  return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+}
+
+/** Fetch Pro-only users. */
 export async function getProUsers() {
   const { db } = getServices();
   const snap = await getDocs(query(collection(db, "users"), where("pro", "==", true)));
