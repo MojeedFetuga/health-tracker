@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Get your public key from: dashboard.paystack.com → Settings → API Keys
+// Set VITE_PAYSTACK_PUBLIC_KEY in your Vercel environment variables.
+// Get your key from: dashboard.paystack.com → Settings → API Keys
 // Use pk_test_... for testing, pk_live_... for real payments
 // ─────────────────────────────────────────────────────────────────────────────
-export const PAYSTACK_PUBLIC_KEY = ""; // ← paste your key here
+export const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
 
 // Single one-time lifetime plan
 export const PLANS = {

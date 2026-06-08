@@ -14,6 +14,7 @@
 // 6. Paste it below
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const GOOGLE_DRIVE_CLIENT_ID = ""; // ← paste your OAuth 2.0 Client ID here
+// Set VITE_GOOGLE_DRIVE_CLIENT_ID in your Vercel environment variables.
+export const GOOGLE_DRIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_DRIVE_CLIENT_ID || "";
 
 export const IS_DRIVE_CONFIGURED = !!GOOGLE_DRIVE_CLIENT_ID;
