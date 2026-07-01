@@ -2487,12 +2487,21 @@ function UpgradeModal({ user, onClose, toast, onProActivated }) {
         metadata: { uid: user.uid, plan: "lifetime" },
         onSuccess: async (res) => {
           try {
-            await setProStatus({ plan: "lifetime", ref: res.reference });
+            // Pass user data explicitly from closure — auth.currentUser can be
+            // transiently null when the Paystack iframe callback fires
+            await setProStatus({
+              plan: "lifetime",
+              ref:  res.reference,
+              uid:         user.uid,
+              email:       user.email,
+              displayName: user.displayName || "",
+            });
             toast("🎉 Pro activated! Welcome to DailyVitals Pro");
             onProActivated?.();
             onClose();
           } catch (e) {
-            toast("Payment received but activation failed — contact support with ref: " + res.reference);
+            console.error("Pro activation error:", e);
+            toast("Payment received but activation failed — contact palladiuminnovations@gmail.com with ref: " + res.reference);
           }
         },
         onCancel: () => { setPaying(false); },

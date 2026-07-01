@@ -114,24 +114,33 @@ export async function deleteAllUserData() {
 // ── PRO STATUS ────────────────────────────────────────────────────────────────
 const PRO_CACHE = "mh_pro_v1";
 
-/** Write pro status to Firestore + localStorage cache after a successful payment. */
-export async function setProStatus({ plan, ref }) {
+/**
+ * Write pro status to Firestore + localStorage cache after a successful payment.
+ * uid/email/displayName can be passed explicitly to avoid relying on
+ * auth.currentUser, which may be transiently null during Paystack callback.
+ */
+export async function setProStatus({ plan, ref, uid: passedUid, email: passedEmail, displayName: passedName }) {
   const { auth, db } = getServices();
   const user = auth.currentUser;
-  if (!user) throw new Error("Not signed in");
 
-  // Lifetime plans never expire; set expiresAt to year 9999
+  const uid         = passedUid   || user?.uid;
+  const email       = passedEmail || user?.email       || "";
+  const displayName = passedName  || user?.displayName || "";
+
+  if (!uid) throw new Error("Not signed in — please sign in and try again");
+
   const expiresAt = plan === "lifetime" ? "9999-12-31T23:59:59.000Z" : null;
-
   const data = {
     pro: true, plan, ref,
     paidAt: new Date().toISOString(),
-    expiresAt,
-    email:       user.email,
-    displayName: user.displayName || "",
+    expiresAt, email, displayName,
   };
-  await setDoc(doc(db, "users", user.uid), data, { merge: true });
+
+  // Write localStorage first so Pro activates instantly in the UI
   localStorage.setItem(PRO_CACHE, JSON.stringify(data));
+
+  // Then persist to Firestore (user is Pro even if this momentarily fails)
+  await setDoc(doc(db, "users", uid), data, { merge: true });
   return data;
 }
 
